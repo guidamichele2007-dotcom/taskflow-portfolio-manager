@@ -8,7 +8,7 @@ Questa cartella contiene la base progettuale completa che guida tutte le fasi su
 
 ---
 
-> **Nota sulla gerarchia**: l'identità, la strategia e le regole inviolabili del prodotto sono definite nella **[Product Bible](product_bible/README.md)** (`product_bible/`), che prevale su questa documentazione tecnica in caso di conflitto. Questa cartella descrive *come* costruire; la Bible stabilisce *perché e che cosa non si fa mai*.
+> **Nota sulla gerarchia**: l'identità, la strategia e le regole inviolabili del prodotto sono definite nella **[Product Bible](product_bible/README.md)** (`product_bible/`), che prevale su questa documentazione tecnica in caso di conflitto. Il comportamento completo e senza ambiguità di ogni funzione è definito nella **[Functional Bible](functional_bible/README.md)** (`functional_bible/`), che sta a monte di ogni futura schermata, API, schema dati o riga di codice. Questa cartella descrive *come* costruire; la Product Bible stabilisce *perché e che cosa non si fa mai*; la Functional Bible stabilisce *che cosa deve accadere, esattamente*.
 
 ## Indice dei documenti
 
