@@ -1,0 +1,29 @@
+#!/bin/sh
+# Pre-commit hook (README-BUILD.md §8). Runs the fast, local-only checks:
+# Kotlin formatting (ktlint) and Go formatting (gofmt) on staged files only.
+# No network access, no full build — kept fast enough to run on every commit.
+#
+# Enable with: git config core.hooksPath scripts/git-hooks
+
+set -e
+
+staged_kt_files=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.kts?$' || true)
+staged_go_files=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.go$' || true)
+
+if [ -n "$staged_kt_files" ]; then
+    echo "pre-commit: checking Kotlin formatting (ktlint)..."
+    ./gradlew ktlintCheck --console=plain -q
+fi
+
+if [ -n "$staged_go_files" ]; then
+    echo "pre-commit: checking Go formatting (gofmt)..."
+    unformatted=$(gofmt -l $staged_go_files)
+    if [ -n "$unformatted" ]; then
+        echo "gofmt found unformatted files:"
+        echo "$unformatted"
+        echo "Run: gofmt -w <file>"
+        exit 1
+    fi
+fi
+
+exit 0

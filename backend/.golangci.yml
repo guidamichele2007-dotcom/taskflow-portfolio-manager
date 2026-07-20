@@ -1,0 +1,19 @@
+# Lint configuration for the backend module (TDR-03, TDR-16: dependency/code
+# quality gates from day one). Bootstrap scope: default, non-invasive linters
+# only — no project-specific exclusions yet, none are needed until the first
+# real service logic lands.
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  enable:
+    - staticcheck
+    - unused
+    - errcheck
+
+formatters:
+  enable:
+    - gofmt
+    - goimports

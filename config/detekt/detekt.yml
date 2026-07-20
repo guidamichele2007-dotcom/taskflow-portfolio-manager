@@ -1,0 +1,14 @@
+# Shared detekt ruleset (README-BUILD.md §7). Bootstrap scope: only the
+# rules relevant to placeholder modules are tuned here; buildUponDefaultConfig
+# (set in the convention plugin) keeps every other default rule active.
+# Revisit once real business logic lands in the first sprint.
+
+style:
+  MagicNumber:
+    active: false # placeholder modules have no business logic to trigger false positives on yet
+
+comments:
+  UndocumentedPublicClass:
+    active: false # bootstrap placeholders are intentionally undocumented; see each module's README.md instead
+  UndocumentedPublicFunction:
+    active: false

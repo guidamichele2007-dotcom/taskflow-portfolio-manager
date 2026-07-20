@@ -141,3 +141,34 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# --- OmniLife bootstrap (README-BUILD.md) ---
+
+# Gradle
+.gradle/
+**/build/
+!src/**/build/
+.kotlin/
+local.properties
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+
+# Xcode / Swift Package Manager
+.build/
+*.xcodeproj/
+*.xcworkspace/
+xcuserdata/
+DerivedData/
+.swiftpm/
+
+# Go
+backend/bin/
+backend/*.test
+
+# OS
+.DS_Store
