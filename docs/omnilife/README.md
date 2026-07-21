@@ -25,6 +25,7 @@ Questa cartella contiene la base progettuale completa che guida tutte le fasi su
 | 09 | [Piano di Sviluppo](09-piano-di-sviluppo.md) | Fasi di sviluppo, milestone, criteri di uscita, strategia QA e DevOps |
 | — | [Technology Decision Record](technology_decision_record.md) | Le 18 decisioni tecnologiche approvate (linguaggio, backend, database, sync, sicurezza, DevOps…), ciascuna con almeno 3 alternative confrontate |
 | — | [Bootstrap Infrastructure Report](bootstrap_infrastructure_report.md) | Il primo codice del repository: workspace Kotlin Multiplatform, app iOS/Android, backend Go, CI, lint — solo infrastruttura, nessuna funzionalità di business. Vedi anche [README-BUILD.md](../../README-BUILD.md) alla radice del repository |
+| — | [Sprint 1 Report — Core Engine + Modulo Attività](sprint1_report.md) | La prima funzionalità reale: Core Engine (Event Bus, envelope, gestione errori), modulo Attività completo (CRUD, sottotask, priorità, ricorrenza, viste, persistenza locale) e stato MVI per le sue schermate — 99 test, TDR-19…21 |
 
 ---
 
