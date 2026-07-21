@@ -19,3 +19,5 @@ complexity:
     thresholdInClasses: 17
   LongParameterList:
     constructorThreshold: 10 # manual-DI composition roots (TDR-19) take one constructor param per injected use case
+  LongMethod:
+    threshold: 70 # an MVI dispatch() `when` over many intents (TDR-02) is inherently long, one line per intent branch

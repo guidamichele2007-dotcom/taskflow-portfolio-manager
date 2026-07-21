@@ -33,93 +33,71 @@ class TaskDetailViewModelTest {
         scope = scope,
     )
 
-    @Test
-    fun `loads the task and its subtasks on creation`() =
-        runTest {
-            val scope = CoroutineScope(UnconfinedTestDispatcher())
-            val repository =
-                FakeTaskRepository().apply {
-                    tasks["task-1"] = Task(envelope = testEnvelopeFixture("task-1"), title = "Parent", listId = "list-1")
-                }
-
-            val viewModel = viewModel(repository, "task-1", scope)
-
-            assertEquals("Parent", viewModel.state.value.task?.title)
-            assertTrue(!viewModel.state.value.isLoading)
-        }
+    private fun repositoryWithParentTask(): FakeTaskRepository = FakeTaskRepository().apply {
+        tasks["task-1"] = Task(envelope = testEnvelopeFixture("task-1"), title = "Parent", listId = "list-1")
+    }
 
     @Test
-    fun `a missing task marks the state as no longer available`() =
-        runTest {
-            val scope = CoroutineScope(UnconfinedTestDispatcher())
-            val viewModel = viewModel(FakeTaskRepository(), "missing", scope)
+    fun `loads the task and its subtasks on creation`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher())
+        val viewModel = viewModel(repositoryWithParentTask(), "task-1", scope)
 
-            assertTrue(viewModel.state.value.noLongerAvailable)
-        }
-
-    @Test
-    fun `changing the priority autosaves without an explicit save intent`() =
-        runTest {
-            val scope = CoroutineScope(UnconfinedTestDispatcher())
-            val repository =
-                FakeTaskRepository().apply {
-                    tasks["task-1"] = Task(envelope = testEnvelopeFixture("task-1"), title = "Parent", listId = "list-1")
-                }
-            val viewModel = viewModel(repository, "task-1", scope)
-
-            viewModel.dispatch(TaskDetailIntent.ChangePriority(TaskPriority.HIGH))
-
-            assertEquals(TaskPriority.HIGH, repository.tasks.getValue("task-1").priority)
-            assertEquals(TaskPriority.HIGH, viewModel.state.value.task?.priority)
-        }
+        assertEquals("Parent", viewModel.state.value.task?.title)
+        assertTrue(!viewModel.state.value.isLoading)
+    }
 
     @Test
-    fun `adding a subtask clears the draft title and appends it to the list`() =
-        runTest {
-            val scope = CoroutineScope(UnconfinedTestDispatcher())
-            val repository =
-                FakeTaskRepository().apply {
-                    tasks["task-1"] = Task(envelope = testEnvelopeFixture("task-1"), title = "Parent", listId = "list-1")
-                }
-            val viewModel = viewModel(repository, "task-1", scope)
+    fun `a missing task marks the state as no longer available`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher())
+        val viewModel = viewModel(FakeTaskRepository(), "missing", scope)
 
-            viewModel.dispatch(TaskDetailIntent.ChangeNewSubtaskTitle("Buy milk"))
-            viewModel.dispatch(TaskDetailIntent.AddSubtask)
-
-            assertEquals("", viewModel.state.value.newSubtaskTitle)
-            assertEquals(listOf("Buy milk"), viewModel.state.value.subtasks.map { it.title })
-        }
+        assertTrue(viewModel.state.value.noLongerAvailable)
+    }
 
     @Test
-    fun `deleting the task marks the state as no longer available`() =
-        runTest {
-            val scope = CoroutineScope(UnconfinedTestDispatcher())
-            val repository =
-                FakeTaskRepository().apply {
-                    tasks["task-1"] = Task(envelope = testEnvelopeFixture("task-1"), title = "Parent", listId = "list-1")
-                }
-            val viewModel = viewModel(repository, "task-1", scope)
+    fun `changing the priority autosaves without an explicit save intent`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher())
+        val repository = repositoryWithParentTask()
+        val viewModel = viewModel(repository, "task-1", scope)
 
-            viewModel.dispatch(TaskDetailIntent.Delete)
+        viewModel.dispatch(TaskDetailIntent.ChangePriority(TaskPriority.HIGH))
 
-            assertTrue(viewModel.state.value.noLongerAvailable)
-        }
+        assertEquals(TaskPriority.HIGH, repository.tasks.getValue("task-1").priority)
+        assertEquals(TaskPriority.HIGH, viewModel.state.value.task?.priority)
+    }
 
     @Test
-    fun `toggling a subtask updates its completed flag in the state`() =
-        runTest {
-            val scope = CoroutineScope(UnconfinedTestDispatcher())
-            val repository =
-                FakeTaskRepository().apply {
-                    tasks["task-1"] = Task(envelope = testEnvelopeFixture("task-1"), title = "Parent", listId = "list-1")
-                }
-            val viewModel = viewModel(repository, "task-1", scope)
-            viewModel.dispatch(TaskDetailIntent.ChangeNewSubtaskTitle("Step"))
-            viewModel.dispatch(TaskDetailIntent.AddSubtask)
-            val subtaskId = viewModel.state.value.subtasks.single().id
+    fun `adding a subtask clears the draft title and appends it to the list`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher())
+        val viewModel = viewModel(repositoryWithParentTask(), "task-1", scope)
 
-            viewModel.dispatch(TaskDetailIntent.ToggleSubtask(subtaskId))
+        viewModel.dispatch(TaskDetailIntent.ChangeNewSubtaskTitle("Buy milk"))
+        viewModel.dispatch(TaskDetailIntent.AddSubtask)
 
-            assertTrue(viewModel.state.value.subtasks.single().completed)
-        }
+        assertEquals("", viewModel.state.value.newSubtaskTitle)
+        assertEquals(listOf("Buy milk"), viewModel.state.value.subtasks.map { it.title })
+    }
+
+    @Test
+    fun `deleting the task marks the state as no longer available`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher())
+        val viewModel = viewModel(repositoryWithParentTask(), "task-1", scope)
+
+        viewModel.dispatch(TaskDetailIntent.Delete)
+
+        assertTrue(viewModel.state.value.noLongerAvailable)
+    }
+
+    @Test
+    fun `toggling a subtask updates its completed flag in the state`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher())
+        val viewModel = viewModel(repositoryWithParentTask(), "task-1", scope)
+        viewModel.dispatch(TaskDetailIntent.ChangeNewSubtaskTitle("Step"))
+        viewModel.dispatch(TaskDetailIntent.AddSubtask)
+        val subtaskId = viewModel.state.value.subtasks.single().id
+
+        viewModel.dispatch(TaskDetailIntent.ToggleSubtask(subtaskId))
+
+        assertTrue(viewModel.state.value.subtasks.single().completed)
+    }
 }

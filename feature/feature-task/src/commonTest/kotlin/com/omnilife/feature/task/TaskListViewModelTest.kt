@@ -132,7 +132,11 @@ class TaskListViewModelTest {
             val scope = CoroutineScope(UnconfinedTestDispatcher())
             val repository =
                 FakeTaskRepository().apply {
-                    tasks["a"] = Task(envelope = testEnvelopeFixture("a"), title = "Call the accountant", listId = "list-1")
+                    tasks["a"] = Task(
+                        envelope = testEnvelopeFixture("a"),
+                        title = "Call the accountant",
+                        listId = "list-1",
+                    )
                     tasks["b"] = Task(envelope = testEnvelopeFixture("b"), title = "Buy milk", listId = "list-1")
                 }
             val viewModel = viewModel(repository, scope)
