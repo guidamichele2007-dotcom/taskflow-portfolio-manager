@@ -1,7 +1,8 @@
 package com.omnilife.core.sync
 
 /**
- * Motore di Sincronizzazione: contratto di convergenza offline-first (CRDT minimale). NESSUNA implementazione in questo bootstrap.
+ * Motore di Sincronizzazione: contratto di convergenza offline-first (CRDT minimale). NESSUNA implementazione in
+ * questo bootstrap.
  *
  * Functional Bible MFC §3; Data Model Bible §8/§11; Technical Architecture Bible §05; TDR-05.
  *

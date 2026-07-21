@@ -1,7 +1,8 @@
 package com.omnilife.shared
 
 /**
- * Modulo aggregatore: espone al layer nativo (androidApp, iosApp) l'insieme dei moduli core/domain come un'unica libreria (per iOS: confine di export del framework). Non contiene logica propria.
+ * Modulo aggregatore: espone al layer nativo (androidApp, iosApp) l'insieme dei moduli core/domain come un'unica
+ * libreria (per iOS: confine di export del framework). Non contiene logica propria.
  *
  * Technology Decision Record, TDR-01 ("Kotlin Multiplatform per il dominio condiviso"), TDR-18
  *

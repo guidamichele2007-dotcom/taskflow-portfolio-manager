@@ -1,7 +1,8 @@
 package com.omnilife.core.security
 
 /**
- * Servizio di Sicurezza: contratto della gerarchia di cifratura e dello sblocco locale. NESSUNA implementazione in questo bootstrap.
+ * Servizio di Sicurezza: contratto della gerarchia di cifratura e dello sblocco locale. NESSUNA implementazione in
+ * questo bootstrap.
  *
  * Functional Bible SEC-001…003, MFC §5; Technical Architecture Bible §10; TDR-04.
  *

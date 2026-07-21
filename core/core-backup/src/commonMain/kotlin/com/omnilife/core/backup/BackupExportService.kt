@@ -1,7 +1,8 @@
 package com.omnilife.core.backup
 
 /**
- * Motore di Backup/Export: contratto di snapshot, ripristino ed esportazione. NESSUNA implementazione in questo bootstrap.
+ * Motore di Backup/Export: contratto di snapshot, ripristino ed esportazione. NESSUNA implementazione in questo
+ * bootstrap.
  *
  * Functional Bible BKP-001…004, EXP-001…003; Technical Architecture Bible §13 §4.
  *

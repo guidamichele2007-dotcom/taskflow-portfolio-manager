@@ -1,7 +1,8 @@
 package com.omnilife.domain.health
 
 /**
- * Dominio Salute: ManualHealthMetric (entità piena); HealthPlatformReading in sola lettura, mai sincronizzata (deroga dichiarata).
+ * Dominio Salute: ManualHealthMetric (entità piena); HealthPlatformReading in sola lettura, mai sincronizzata
+ * (deroga dichiarata).
  *
  * Data Model Bible §08 (DM-HLTH-01/02); Functional Bible, modulo Salute; Engineering Plan EPIC-HLTH.
  *

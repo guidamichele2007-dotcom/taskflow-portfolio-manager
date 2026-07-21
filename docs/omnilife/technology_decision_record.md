@@ -577,6 +577,104 @@
 
 ---
 
+## TDR-19 · Dependency Injection
+
+> Nota: decisione presa durante lo Sprint 1 (Core Engine + Modulo Attività), non nel lotto originario TDR-01…18 — la Technical Architecture Bible definisce il Dependency Inversion Principle e la Dependency Rule, ma nessun meccanismo concreto di injection era stato scelto. Verificato con ricerca esaustiva su Technical Architecture Bible e questo stesso documento: nessuna menzione di framework DI, service locator o "iniezione delle dipendenze" prima di questa voce.
+
+**Decisione**: **injection manuale via costruttore**, composta in un unico *composition root* per piattaforma (un file `AppContainer`/equivalente in ciascun entry point, non un framework).
+
+| Alternativa | Descrizione | Esito |
+|---|---|---|
+| **A — Injection manuale via costruttore** | Ogni classe dichiara le proprie dipendenze nel costruttore; un composition root le assembla a mano nel punto di ingresso | ✅ Scelta |
+| **B — Koin** | Framework DI basato su service locator, compatibile KMP, popolare nell'ecosistema Kotlin | ❌ Scartata |
+| **C — Kodein-DI** | Framework DI dichiarativo, anch'esso compatibile KMP | ❌ Scartata |
+
+**Motivazione**: al perimetro di questo sprint (Core Engine + un solo modulo di dominio) il grafo delle dipendenze è piccolo e interamente noto a compile-time — esattamente il caso in cui un framework aggiunge costo (nuova dipendenza esterna, resolution a runtime anziché a compile-time, curva di apprendimento) senza risolvere un problema reale ancora esistente. Koin (B) risolve service-location a runtime, il che sposta errori di wiring da compile-time a runtime — in tensione con l'enfasi della Technical Architecture Bible sulla Dependency Rule verificabile "per costruzione" (§01 §4), non a runtime. Kodein-DI (C) è più tipizzato di Koin ma introduce comunque un container e una sintassi propria per un grafo che, a questa scala, un costruttore esprime già interamente. Nessuna delle Bible impone o preclude un framework: la scelta è aperta, quindi si adotta l'opzione a costo/rischio minimo compatibile con "nessuna astrazione prematura" (principio generale di ingegneria del progetto).
+
+**Vantaggi**: zero dipendenze esterne aggiuntive; errori di wiring mancante sono errori di compilazione, non crash a runtime; nessuna "magia" da spiegare a chi legge il codice per la prima volta.
+
+**Svantaggi**: il composition root cresce linearmente col numero di moduli attivati — da rivalutare (probabilmente in favore di B o C) quando il grafo supererà la manciata di dipendenze di un singolo Epic; non risolve da solo lo scope "per-richiesta" (non necessario: nessuna dipendenza di questo sprint ha un ciclo di vita più corto del processo).
+
+**Impatto sul progetto**: ogni modulo (`domain-task`, `feature-task`, ecc.) espone solo interfacce e classi con dipendenze dichiarate nel costruttore; l'assemblaggio concreto (quale implementazione di `TaskRepository` usare, quale istanza di `EventBus`) avviene in un unico punto per app (`androidApp`/`iosApp`/test), mai sparso nei moduli di dominio.
+
+**Rischi**: nessuno strutturale a questa scala; rischio di manutenzione se il composition root non viene rifattorizzato quando cresce (mitigazione: rivalutare questa decisione esplicitamente a ogni nuovo Epic, non lasciarla implicita).
+
+**Costo**: nessuno (nessuna libreria).
+
+**Facilità di manutenzione**: alta a questa scala; da rivalutare esplicitamente oltre i ~5-6 moduli attivi contemporaneamente.
+
+**Scalabilità**: limitata nel tempo per costruzione — è una scelta dichiaratamente provvisoria, non una preclusione permanente di un framework DI.
+
+**Compatibilità con le Bible**: piena — nessuna Bible impone o vieta un meccanismo DI; coerente con il Dependency Inversion Principle già stabilito (Technical Architecture Bible §00 §2), che riguarda la *direzione* delle dipendenze, non il *meccanismo* con cui vengono assemblate.
+
+---
+
+## TDR-20 · Libreria di accesso SQLite per Kotlin Multiplatform
+
+> Nota: decisione presa durante lo Sprint 1. TDR-06 sceglie il motore (SQLite cifrato + FTS) ma non la libreria di accesso KMP — esplicitamente rinviato ("Note" di TDR-06 e Technical Architecture Bible §14 §4.1 item 2).
+
+**Decisione**: **SQLDelight**.
+
+| Alternativa | Descrizione | Esito |
+|---|---|---|
+| **A — SQLDelight** | Genera API Kotlin tipizzate da file `.sq` (SQL dichiarato a mano); driver ufficiali per JVM/Android/iOS/JS | ✅ Scelta |
+| **B — Room (Kotlin Multiplatform)** | ORM/DAO annotation-based di Google, supporto KMP recente | ❌ Scartata |
+| **C — Binding SQLite grezzo via expect/actual** | Wrapping manuale delle API SQLite native per piattaforma, senza libreria intermedia | ❌ Scartata |
+
+**Motivazione**: TDR-06 richiede esplicitamente un motore relazionale con estensione FTS integrata; SQLDelight genera codice a partire da SQL scritto a mano (incluse le virtual table FTS), verificato a compile-time contro lo schema — coerente con la preferenza già mostrata in tutto il documento per soluzioni verificabili a compile-time piuttosto che a runtime (vedi TDR-19). Room per KMP (B) è più recente e meno maturo sui target non-Android/JVM (in particolare iOS) rispetto a SQLDelight, che supporta tutti i target KMP di TDR-01 da anni; inoltre Room resta concettualmente un ORM basato su annotazioni/riflessione, meno allineato alla preferenza per query dichiarate esplicitamente. Il binding grezzo (C) reinventerebbe query builder, mapping e gestione delle migrazioni da zero, senza alcun vantaggio dato che nessuna Bible richiede di evitare una libreria di terze parti per la persistenza.
+
+**Vantaggi**: driver JVM (usato per la verifica in questo sandbox), Android e iOS nativi e maturi; query verificate a compile-time (un errore SQL è un errore di build, non un crash a runtime); supporto FTS diretto, coerente con TDR-06.
+
+**Svantaggi**: un ulteriore strumento di build (plugin Gradle, generazione codice da file `.sq`) da imparare; la cifratura a livello di pagina richiesta da TDR-06 richiede un driver SQLCipher aggiuntivo — non collegata in questo sprint (vedi nota su Sicurezza sotto).
+
+**Impatto sul progetto**: `domain-task` dichiara `TaskRepository` (l'astrazione, per Dependency Inversion); l'implementazione concreta basata su SQLDelight vive nello stesso modulo in questo sprint (vedi README-BUILD.md §11 per la convenzione completa), con un `DatabaseDriverFactory` `expect`/`actual` per piattaforma (solo l'`actual` JVM è verificato in questo sandbox, coerente con il gating già documentato per Android/iOS in tutto il bootstrap).
+
+**Nota su Sicurezza (deroga dichiarata di questo sprint)**: TDR-06 richiede cifratura a livello di pagina. Il Servizio di Sicurezza (`core-security`) resta un'interfaccia segnaposto in questo sprint (fuori perimetro per esplicita richiesta: "non implementare autenticazione remota"; la cifratura del database richiede una gerarchia di chiavi che è responsabilità di quel servizio, Technical Architecture Bible §10). Implementare qui una cifratura ad-hoc senza quella gerarchia significherebbe inventare uno schema di gestione chiavi non documentato. **Questo sprint usa quindi SQLite non cifrato**; il driver SQLCipher va collegato quando `core-security` fornirà la gerarchia di chiavi — annotato come blocco per lo Sprint 2/EPIC-SET nel report finale.
+
+**Rischi**: basso — libreria consolidata, ampiamente usata in produzione KMP.
+
+**Costo**: nessuno (open source, Apache 2.0).
+
+**Facilità di manutenzione**: alta — schema e query in un solo posto (`.sq`), errori rilevati a compile-time.
+
+**Scalabilità**: adeguata ai volumi dichiarati (MFC-E-14: 100.000+ entità) — SQLite è comprovato a questa scala, indipendentemente dalla libreria di accesso.
+
+**Compatibilità con le Bible**: piena con TDR-06 (stesso motore, FTS); la deroga sulla cifratura è temporanea e dichiarata esplicitamente, non silenziosa.
+
+---
+
+## TDR-21 · Tipo di errore per i casi d'uso (Application layer)
+
+> Nota: decisione presa durante lo Sprint 1. La Technical Architecture Bible §07 descrive **dove** un errore nasce e viene tradotto tra i layer, ma non definisce alcun tipo Kotlin concreto — confermato per ricerca esaustiva, nessun `Result`/`Either`/gerarchia di eccezioni è specificata in nessuna Bible.
+
+**Decisione**: **tipo `Result` sigillato dedicato** (`OmniResult<T>` — `Success<T>` / `Failure`), non eccezioni, non `kotlin.Result`, non una libreria di terze parti.
+
+| Alternativa | Descrizione | Esito |
+|---|---|---|
+| **A — Result sigillato dedicato** | Un piccolo tipo `sealed class` proprio del progetto, con una gerarchia di errori di dominio esplicita | ✅ Scelta |
+| **B — Eccezioni Kotlin standard** | Propagazione tramite `throw`/`try-catch` | ❌ Scartata |
+| **C — Libreria funzionale di terze parti (es. Arrow `Either`)** | Tipo `Either`/`Result` generico da una libreria funzionale esterna | ❌ Scartata |
+
+**Motivazione**: la Technical Architecture Bible §07 stabilisce che ogni confine di layer è anche un punto di traduzione dell'errore ("un errore di L5 non raggiunge mai L1 nella sua forma originale") — un tipo di ritorno esplicito rende questa traduzione un fatto verificabile dal compilatore (ogni funzione dichiara cosa può fallire nella sua firma), mentre le eccezioni (B) sono invisibili nella firma e rischiano di attraversare un layer senza essere tradotte, esattamente ciò che §07 vieta. Una libreria funzionale esterna (C) offrirebbe lo stesso beneficio ma introdurrebbe una dipendenza e un vocabolario (`Either`, `left`/`right`) estranei a tutta la documentazione esistente, per un guadagno marginale rispetto a un tipo dedicato di poche righe.
+
+**Vantaggi**: firma di ogni caso d'uso dichiara esplicitamente i propri errori possibili; nessuna dipendenza esterna; il vocabolario degli errori (`TaskError.TitoloMancante`, ecc.) può rispecchiare direttamente le regole `TASK-R-*`/`MFC-R-*` citate nel codice.
+
+**Svantaggi**: più verboso di un semplice `try/catch` per chi scrive un singolo caso d'uso; richiede disciplina per non degenerare in eccezioni "per i casi veramente eccezionali" (es. bug di programmazione) — quelle restano eccezioni non catturate, per costruzione.
+
+**Impatto sul progetto**: ogni caso d'uso in `domain-task`/`feature-task` restituisce `OmniResult<T>`; le violazioni di invarianti (`TASK-R-01` titolo mancante, ecc.) sono valori `Failure` tipizzati, mai eccezioni.
+
+**Rischi**: nessuno strutturale.
+
+**Costo**: nessuno.
+
+**Facilità di manutenzione**: alta — un solo tipo condiviso in `core-common`, riusato da ogni modulo futuro.
+
+**Scalabilità**: neutra (riguarda la struttura del codice).
+
+**Compatibilità con le Bible**: piena — rende meccanicamente verificabile la policy di traduzione degli errori già normata in Technical Architecture Bible §07.
+
+---
+
 ## Tabella Finale — Decisioni Tecnologiche Approvate
 
 | ID | Area | Decisione approvata |
@@ -599,8 +697,13 @@
 | TDR-16 | Dipendenze | SCA + SBOM continui, allowlist di licenze curata, dal primo commit |
 | TDR-17 | Packaging | Pacchetti nativi store (App Store/Play Store) + delivery modulare on-demand |
 | TDR-18 | Build system | Build multiplatform unificata (classe Gradle) per modulo condiviso + UI native |
+| TDR-19 | Dependency Injection | Injection manuale via costruttore, composition root per piattaforma (nessun framework) |
+| TDR-20 | Libreria di accesso SQLite (KMP) | SQLDelight |
+| TDR-21 | Tipo di errore per i casi d'uso | `Result` sigillato dedicato (`OmniResult<T>`), non eccezioni |
 
-**Filo conduttore delle 18 decisioni**: ovunque esistesse una scelta tra (a) controllo diretto/open-source/portabile e (b) comodità tramite un fornitore proprietario di terze parti, è stata preferita (a) — coerenza diretta con l'indipendenza tecnologica ed economica già rivendicata in tutta la documentazione precedente (Product Constitution, Business Strategy, Technical Architecture Bible). Nessuna decisione introduce un fornitore con visibilità sui contenuti utente; ogni decisione è stata verificata contro almeno una Bible esistente e non ne contraddice alcuna.
+**Nota sulle voci TDR-19…21**: a differenza di TDR-01…18 (decise tutte insieme, prima di ogni riga di codice), queste tre voci sono state aggiunte durante lo Sprint 1 (Core Engine + Modulo Attività) quando l'implementazione ha incontrato una decisione tecnica non coperta dalle Bible esistenti. Seguono lo stesso metodo (≥3 alternative, motivazione contro la documentazione esistente) e la stessa autorità delle prime 18.
+
+**Filo conduttore delle 18 decisioni originarie**: ovunque esistesse una scelta tra (a) controllo diretto/open-source/portabile e (b) comodità tramite un fornitore proprietario di terze parti, è stata preferita (a) — coerenza diretta con l'indipendenza tecnologica ed economica già rivendicata in tutta la documentazione precedente (Product Constitution, Business Strategy, Technical Architecture Bible). Nessuna decisione introduce un fornitore con visibilità sui contenuti utente; ogni decisione è stata verificata contro almeno una Bible esistente e non ne contraddice alcuna.
 
 ---
 

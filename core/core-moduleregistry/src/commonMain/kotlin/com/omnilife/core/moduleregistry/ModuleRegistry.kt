@@ -1,7 +1,8 @@
 package com.omnilife.core.moduleregistry
 
 /**
- * Registro Moduli: stato di attivazione/disattivazione di ogni modulo (DM-SYS-03 ModuleActivation) — unica fonte di verità su quali moduli sono invocabili.
+ * Registro Moduli: stato di attivazione/disattivazione di ogni modulo (DM-SYS-03 ModuleActivation) — unica fonte di
+ * verità su quali moduli sono invocabili.
  *
  * Data Model Bible §01 (DM-SYS-03); Technical Architecture Bible §04 (ciclo di vita di un modulo).
  *

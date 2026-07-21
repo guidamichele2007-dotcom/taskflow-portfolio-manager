@@ -1,7 +1,8 @@
 package com.omnilife.platform.security
 
 /**
- * Adattatore verso l'enclave di sicurezza/biometria del dispositivo. NESSUNA implementazione crittografica in questo bootstrap.
+ * Adattatore verso l'enclave di sicurezza/biometria del dispositivo. NESSUNA implementazione crittografica in
+ * questo bootstrap.
  *
  * Technical Architecture Bible §01 §5, §10; TDR-04.
  *

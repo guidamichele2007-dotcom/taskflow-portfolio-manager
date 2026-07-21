@@ -71,6 +71,7 @@ extensions.configure<org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformExtensio
         }
         commonTest.dependencies {
             implementation(kotlin("test"))
+            implementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
         }
     }
 
@@ -98,7 +99,17 @@ tasks.withType<Test>().configureEach {
 // Lint/formatter (README-BUILD.md §7). ktlint uses its built-in default
 // style (.editorconfig at the repo root refines a few base rules); detekt
 // uses the shared ruleset in config/detekt/detekt.yml.
+//
+// detekt's default `source` is the single-platform `main` source set, which
+// no KMP module has (Kotlin Multiplatform registers `commonMain`/`jvmMain`/
+// etc. instead) — without this override every module's detekt task is
+// silently NO-SOURCE and lints nothing.
 detekt {
     config.setFrom(rootDir.resolve("config/detekt/detekt.yml"))
     buildUponDefaultConfig = true
+    source.setFrom(
+        "src/commonMain/kotlin",
+        "src/commonTest/kotlin",
+        "src/jvmMain/kotlin",
+    )
 }

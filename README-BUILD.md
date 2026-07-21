@@ -116,3 +116,17 @@ Il hook `pre-commit` esegue `ktlintCheck` e `gofmt -l` sui soli file modificati 
 ## 10. TODO strutturali lasciati al primo sprint
 
 Vedi [`docs/omnilife/bootstrap_infrastructure_report.md`](docs/omnilife/bootstrap_infrastructure_report.md) per l'elenco completo, la struttura finale del repository, i moduli creati e le dipendenze fra moduli.
+
+## 11. Convenzioni di ingegneria (a partire da Sprint 1)
+
+Queste convenzioni riempiono gli spazi che la Technical Architecture Bible lascia deliberatamente aperti (§07 traduce gli errori tra layer senza fissarne il tipo; §02-03 definiscono i confini senza fissare nomi di classi). Non sono decisioni tecnologiche (per quelle vedi TDR-19…21) — sono convenzioni di codice, applicate per la prima volta nel modulo Attività e da riusare identiche in ogni Epic futuro.
+
+**Porta di Persistenza / Repository**: l'astrazione (`interface XxxRepository`) vive nello stesso modulo `domain-*` che possiede l'entità (Dependency Inversion: il layer interno dichiara il contratto). In questo sprint, per semplicità e perché il grafo dei moduli è piccolo, anche l'implementazione concreta (SQLDelight, TDR-20) vive nello stesso modulo `domain-*`, in un sotto-package `persistence`. Se in futuro un'implementazione dovesse essere condivisa da più domini, si estrarrà in un modulo `platform-*` dedicato — non prima che serva davvero.
+
+**Caso d'uso (Application layer, L2)**: una classe per caso d'uso, nome `VerboEntità` (es. `CreateTask`, `CompleteTask`, non `TaskUseCase` generico), con un solo metodo `operator fun invoke(...)`. Restituisce sempre `OmniResult<T>` (TDR-21), mai lancia eccezioni per errori di dominio previsti.
+
+**Event Bus — forma concreta**: il contratto Technical Architecture Bible §03 fissa solo due porte concettuali (pubblica/sottoscrivi), non una firma. Convenzione adottata: eventi come sottotipi di una `sealed interface DomainEvent` (uno per modulo, es. `TaskEvent`), bus in-memory, **sincrono** per rispettare "operazione sincrona e locale, mai di rete" (§03 §4) — niente `Flow`/coroutine per la consegna stessa (i souscrittori possono internamente lanciare lavoro asincrono, ma la chiamata di pubblicazione ritorna solo dopo aver notificato ogni sottoscrittore attivo, in ordine di sottoscrizione). Nessuna garanzia d'ordine tra producer diversi (già dichiarato non richiesta dalla Bible).
+
+**Stato UI (MVI, TDR-02) — forma concreta**: `data class XxxUiState` immutabile + `sealed interface XxxIntent` + una classe `XxxViewModel`/`XxxStore` con `val state: StateFlow<XxxUiState>` e `fun dispatch(intent: XxxIntent)`. Vive nel modulo `feature-*`, in Kotlin puro (nessuna dipendenza da Compose/SwiftUI) — verificabile con test JVM ordinari anche in questo sandbox, senza bisogno di un motore di rendering.
+
+**Correzione di perimetro — "Tag" nel modulo Attività**: la Data Model Bible (§10 "Tagging e categorizzazione") e la UX Bible dichiarano esplicitamente **"non esistono tag liberi"** per il modulo Attività (P32 — nessuna tassonomia parallela); l'unica classificazione documentata è Lista (Area→Lista, 2 livelli, TASK-005) + Priorità (3 livelli, TASK-006). Sprint 1 implementa questi due assi, non un'entità Tag — introdurne una contraddirebbe la fonte di verità esistente ("non introdurre funzionalità non documentate").

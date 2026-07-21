@@ -1,7 +1,8 @@
 package com.omnilife.core.designtokens
 
 /**
- * Token del Design System (tipografia, spaziatura, colore, elevazione, motion) come costanti tipizzate. Nessun rendering, nessuna UI.
+ * Token del Design System (tipografia, spaziatura, colore, elevazione, motion) come costanti tipizzate. Nessun
+ * rendering, nessuna UI.
  *
  * Design System Bible §01-03.
  *
