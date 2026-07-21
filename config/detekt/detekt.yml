@@ -1,14 +1,21 @@
-# Shared detekt ruleset (README-BUILD.md §7). Bootstrap scope: only the
-# rules relevant to placeholder modules are tuned here; buildUponDefaultConfig
-# (set in the convention plugin) keeps every other default rule active.
-# Revisit once real business logic lands in the first sprint.
+# Shared detekt ruleset (README-BUILD.md §7). buildUponDefaultConfig (set in
+# the convention plugin) keeps every other default rule active.
 
 style:
   MagicNumber:
     active: false # placeholder modules have no business logic to trigger false positives on yet
+  ReturnCount:
+    max: 4 # guard-clause style early returns for validation failures (OmniResult.Failure) read better than nesting
 
 comments:
   UndocumentedPublicClass:
     active: false # bootstrap placeholders are intentionally undocumented; see each module's README.md instead
   UndocumentedPublicFunction:
     active: false
+
+complexity:
+  TooManyFunctions:
+    thresholdInInterfaces: 16 # a single-entity-family repository (Task/TaskList/Subtask CRUD) legitimately needs this many
+    thresholdInClasses: 16
+  LongParameterList:
+    constructorThreshold: 10 # manual-DI composition roots (TDR-19) take one constructor param per injected use case

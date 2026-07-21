@@ -22,7 +22,7 @@ class UpdateTaskFieldsTest {
     fun `an unchanged field keeps its previous value`() = runTest {
         val repository = repositoryWithTask()
 
-        UpdateTaskFields(repository)("task-1", priority = Edit.Set(TaskPriority.HIGH))
+        UpdateTaskFields(repository)("task-1", TaskFieldEdits(priority = Edit.Set(TaskPriority.HIGH)))
 
         assertEquals("Original", repository.tasks.getValue("task-1").title)
     }
@@ -32,7 +32,7 @@ class UpdateTaskFieldsTest {
         val repository = repositoryWithTask()
         repository.tasks["task-1"] = repository.tasks.getValue("task-1").copy(dueDate = LocalDate(2026, 7, 21))
 
-        UpdateTaskFields(repository)("task-1", dueDate = Edit.Set(null))
+        UpdateTaskFields(repository)("task-1", TaskFieldEdits(dueDate = Edit.Set(null)))
 
         assertNull(repository.tasks.getValue("task-1").dueDate)
     }
@@ -41,7 +41,7 @@ class UpdateTaskFieldsTest {
     fun `clearing the title to blank is rejected (TASK-R-01)`() = runTest {
         val repository = repositoryWithTask()
 
-        val result = UpdateTaskFields(repository)("task-1", title = Edit.Set("   "))
+        val result = UpdateTaskFields(repository)("task-1", TaskFieldEdits(title = Edit.Set("   ")))
 
         assertEquals(TaskError.MissingTitle, (result as OmniResult.Failure).error)
         assertEquals("Original", repository.tasks.getValue("task-1").title)
@@ -49,7 +49,7 @@ class UpdateTaskFieldsTest {
 
     @Test
     fun `updating an unknown task fails`() = runTest {
-        val result = UpdateTaskFields(FakeTaskRepository())("missing", title = Edit.Set("x"))
+        val result = UpdateTaskFields(FakeTaskRepository())("missing", TaskFieldEdits(title = Edit.Set("x")))
         assertEquals(TaskError.TaskNotFound("missing"), (result as OmniResult.Failure).error)
     }
 }

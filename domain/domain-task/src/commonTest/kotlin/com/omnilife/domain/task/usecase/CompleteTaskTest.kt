@@ -69,7 +69,8 @@ class CompleteTaskTest {
         val result = completeTask("task-1", completeOpenSubtasks = null)
 
         assertEquals(TaskError.OpenSubtasksRequireChoice, (result as OmniResult.Failure).error)
-        assertTrue(!repository.tasks.getValue("task-1").completed, "task must remain untouched until the choice is made")
+        val message = "task must remain untouched until the choice is made"
+        assertTrue(!repository.tasks.getValue("task-1").completed, message)
     }
 
     @Test

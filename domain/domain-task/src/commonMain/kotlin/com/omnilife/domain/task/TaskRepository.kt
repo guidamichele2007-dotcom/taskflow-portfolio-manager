@@ -23,7 +23,10 @@ public interface TaskRepository {
 
     public suspend fun findTasks(filter: TaskFilter = TaskFilter(), sort: TaskSort = TaskSort.DEFAULT): List<Task>
 
-    /** Local text search over title/notes (TASK-R-05 scope: within this module, not the cross-module SRCH-* feature). */
+    /**
+     * Local text search over title/notes (TASK-R-05 scope: within this
+     * module, not the cross-module SRCH-* feature).
+     */
     public suspend fun searchTasks(
         query: String,
         lifecycleState: EntityLifecycleState = EntityLifecycleState.ACTIVE,

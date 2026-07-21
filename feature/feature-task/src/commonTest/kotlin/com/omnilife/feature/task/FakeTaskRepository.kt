@@ -9,7 +9,10 @@ import com.omnilife.domain.task.TaskList
 import com.omnilife.domain.task.TaskRepository
 import com.omnilife.domain.task.TaskSort
 
-/** In-memory [TaskRepository] for ViewModel tests — mirrors domain-task's own test fake (kept module-local, test-only code). */
+/**
+ * In-memory [TaskRepository] for ViewModel tests — mirrors domain-task's
+ * own test fake (kept module-local, test-only code).
+ */
 internal class FakeTaskRepository : TaskRepository {
     val tasks: MutableMap<EntityId, Task> = mutableMapOf()
     val subtasks: MutableMap<EntityId, Subtask> = mutableMapOf()

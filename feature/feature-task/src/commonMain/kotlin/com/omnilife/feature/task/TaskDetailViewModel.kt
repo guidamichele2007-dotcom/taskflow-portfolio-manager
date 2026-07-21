@@ -7,6 +7,7 @@ import com.omnilife.domain.task.usecase.DeleteSubtask
 import com.omnilife.domain.task.usecase.DeleteTask
 import com.omnilife.domain.task.usecase.Edit
 import com.omnilife.domain.task.usecase.ReorderSubtasks
+import com.omnilife.domain.task.usecase.TaskFieldEdits
 import com.omnilife.domain.task.usecase.ToggleSubtask
 import com.omnilife.domain.task.usecase.UpdateTaskFields
 import kotlinx.coroutines.CoroutineScope
@@ -42,27 +43,30 @@ public class TaskDetailViewModel(
         when (intent) {
             TaskDetailIntent.Load -> scope.launch { load() }
             is TaskDetailIntent.ChangeTitle -> scope.launch {
-                updateTaskFields(taskId, title = Edit.Set(intent.title))
+                updateTaskFields(taskId, TaskFieldEdits(title = Edit.Set(intent.title)))
                 load()
             }
 
             is TaskDetailIntent.ChangeDueDate -> scope.launch {
-                updateTaskFields(taskId, dueDate = Edit.Set(intent.date), dueTime = Edit.Set(intent.time))
+                updateTaskFields(
+                    taskId,
+                    TaskFieldEdits(dueDate = Edit.Set(intent.date), dueTime = Edit.Set(intent.time)),
+                )
                 load()
             }
 
             is TaskDetailIntent.ChangePriority -> scope.launch {
-                updateTaskFields(taskId, priority = Edit.Set(intent.priority))
+                updateTaskFields(taskId, TaskFieldEdits(priority = Edit.Set(intent.priority)))
                 load()
             }
 
             is TaskDetailIntent.ChangeRecurrence -> scope.launch {
-                updateTaskFields(taskId, recurrenceRule = Edit.Set(intent.rule))
+                updateTaskFields(taskId, TaskFieldEdits(recurrenceRule = Edit.Set(intent.rule)))
                 load()
             }
 
             is TaskDetailIntent.ChangeNotes -> scope.launch {
-                updateTaskFields(taskId, notes = Edit.Set(intent.notes))
+                updateTaskFields(taskId, TaskFieldEdits(notes = Edit.Set(intent.notes)))
                 load()
             }
 
