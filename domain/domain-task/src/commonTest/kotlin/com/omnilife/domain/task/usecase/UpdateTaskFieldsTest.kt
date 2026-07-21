@@ -28,7 +28,7 @@ class UpdateTaskFieldsTest {
     }
 
     @Test
-    fun `setting a field to null clears it (e.g. removing a due date)`() = runTest {
+    fun `setting a field to null clears it, e-g removing a due date`() = runTest {
         val repository = repositoryWithTask()
         repository.tasks["task-1"] = repository.tasks.getValue("task-1").copy(dueDate = LocalDate(2026, 7, 21))
 

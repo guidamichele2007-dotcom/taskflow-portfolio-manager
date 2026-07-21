@@ -1,19 +1,15 @@
 package com.omnilife.domain.task.usecase
 
 import com.omnilife.core.eventbus.InMemoryEventBus
+import com.omnilife.domain.task.FixedClock
 import com.omnilife.domain.task.Task
 import com.omnilife.domain.task.testEnvelope
 import kotlinx.coroutines.test.runTest
-import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import kotlin.test.Test
 import kotlin.test.assertEquals
-
-private class FixedClock(private val instant: Instant) : Clock {
-    override fun now(): Instant = instant
-}
 
 class PostponeTaskTest {
     private val utc = TimeZone.UTC

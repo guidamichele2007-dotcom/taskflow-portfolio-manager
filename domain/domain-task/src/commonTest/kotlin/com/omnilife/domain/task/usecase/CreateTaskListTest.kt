@@ -1,6 +1,7 @@
 package com.omnilife.domain.task.usecase
 
 import com.omnilife.core.common.OmniResult
+import com.omnilife.domain.task.TaskList
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -14,7 +15,7 @@ class CreateTaskListTest {
 
         val result = createTaskList(name = "Casa", ownerAccountId = "account-1", deviceId = "device-1")
 
-        val list = assertIs<OmniResult.Success<_>>(result).value
+        val list = assertIs<OmniResult.Success<TaskList>>(result).value
         assertEquals("Casa", list.name)
         assertEquals(1, repository.lists.size)
     }

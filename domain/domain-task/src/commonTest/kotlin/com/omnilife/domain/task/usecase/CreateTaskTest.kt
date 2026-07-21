@@ -1,7 +1,9 @@
 package com.omnilife.domain.task.usecase
 
 import com.omnilife.core.common.OmniResult
+import com.omnilife.core.eventbus.EventSubscriber
 import com.omnilife.core.eventbus.InMemoryEventBus
+import com.omnilife.domain.task.Task
 import com.omnilife.domain.task.TaskError
 import com.omnilife.domain.task.TaskEvent
 import kotlinx.coroutines.test.runTest
@@ -16,7 +18,7 @@ class CreateTaskTest {
         val repository = FakeTaskRepository()
         val eventBus = InMemoryEventBus()
         val createdEvents = mutableListOf<TaskEvent.Created>()
-        eventBus.subscribe<TaskEvent.Created> { createdEvents.add(it) }
+        eventBus.subscribe(TaskEvent.Created::class, EventSubscriber { createdEvents.add(it) })
         var idCounter = 0
         val createTask = CreateTask(repository, eventBus, newId = { "task-${idCounter++}" })
 
@@ -27,7 +29,7 @@ class CreateTaskTest {
             deviceId = "device-1",
         )
 
-        val task = assertIs<OmniResult.Success<_>>(result).value
+        val task = assertIs<OmniResult.Success<Task>>(result).value
         assertEquals("Call the accountant", task.title)
         assertEquals(1, repository.tasks.size)
         assertEquals(1, createdEvents.size)

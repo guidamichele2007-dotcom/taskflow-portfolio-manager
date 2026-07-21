@@ -40,7 +40,7 @@ class CompleteTaskTest {
 
         val result = completeTask("task-1")
 
-        assertIs<OmniResult.Success<_>>(result)
+        assertIs<OmniResult.Success<Task>>(result)
         val allTasks = repository.tasks.values
         assertEquals(2, allTasks.size, "the completed occurrence plus exactly one next occurrence")
         val nextOccurrence = allTasks.single { it.envelope.id != "task-1" }
@@ -112,7 +112,7 @@ class CompleteTaskTest {
 
         val result = completeTask("task-1")
 
-        assertIs<OmniResult.Success<_>>(result)
+        assertIs<OmniResult.Success<Task>>(result)
         assertEquals(1, repository.tasks.size)
     }
 

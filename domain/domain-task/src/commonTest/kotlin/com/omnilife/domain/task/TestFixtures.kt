@@ -1,6 +1,7 @@
 package com.omnilife.domain.task
 
 import com.omnilife.core.common.Envelope
+import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 
 internal fun testEnvelope(id: String = "task-1"): Envelope = Envelope(
@@ -12,3 +13,11 @@ internal fun testEnvelope(id: String = "task-1"): Envelope = Envelope(
     modifiedAt = Instant.fromEpochMilliseconds(0),
     modifiedByDevice = "device-1",
 )
+
+/**
+ * Shared across test files (internal is module-wide) — never redeclare
+ * this locally, a same-named top-level class clashes at the bytecode level.
+ */
+internal class FixedClock(private val instant: Instant) : Clock {
+    override fun now(): Instant = instant
+}
