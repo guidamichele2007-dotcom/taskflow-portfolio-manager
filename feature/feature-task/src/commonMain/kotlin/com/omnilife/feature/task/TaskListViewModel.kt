@@ -1,6 +1,8 @@
 package com.omnilife.feature.task
 
 import com.omnilife.core.common.EntityId
+import com.omnilife.core.common.onFailure
+import com.omnilife.core.common.onSuccess
 import com.omnilife.domain.task.TaskError
 import com.omnilife.domain.task.usecase.CompleteTask
 import com.omnilife.domain.task.usecase.DeleteTask
