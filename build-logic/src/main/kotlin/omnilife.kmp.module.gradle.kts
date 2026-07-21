@@ -113,3 +113,13 @@ detekt {
         "src/jvmMain/kotlin",
     )
 }
+
+// ktlint scans by Kotlin source set, not by physical directory, so — unlike
+// detekt above — it also picks up generated code that a plugin (e.g.
+// SQLDelight) registers onto commonMain from build/. Generated code is not
+// ours to format.
+extensions.configure<org.jlleitschuh.gradle.ktlint.KtlintExtension> {
+    filter {
+        exclude { entry -> entry.file.path.contains("${File.separatorChar}build${File.separatorChar}") }
+    }
+}
