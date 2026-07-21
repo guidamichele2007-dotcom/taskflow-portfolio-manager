@@ -10,12 +10,14 @@ import com.omnilife.domain.task.usecase.ReorderSubtasks
 import com.omnilife.domain.task.usecase.ToggleSubtask
 import com.omnilife.domain.task.usecase.UpdateTaskFields
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class TaskDetailViewModelTest {
     private fun viewModel(
         repository: FakeTaskRepository,

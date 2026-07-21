@@ -14,6 +14,7 @@ import com.omnilife.domain.task.usecase.SearchTasks
 import com.omnilife.domain.task.usecase.TaskListMode
 import com.omnilife.domain.task.usecase.UncompleteTask
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Clock
@@ -28,6 +29,7 @@ private class FixedClock(private val instant: Instant) : Clock {
     override fun now(): Instant = instant
 }
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class TaskListViewModelTest {
     // 2026-07-21 (Tuesday).
     private val clock = FixedClock(Instant.parse("2026-07-21T09:00:00Z"))
