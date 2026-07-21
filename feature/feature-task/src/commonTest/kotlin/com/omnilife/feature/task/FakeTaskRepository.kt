@@ -28,14 +28,21 @@ internal class FakeTaskRepository : TaskRepository {
 
     override suspend fun findTaskById(id: EntityId): Task? = tasks[id]
 
-    override suspend fun findTasks(filter: TaskFilter, sort: TaskSort): List<Task> = tasks.values.filter { task ->
-        task.envelope.lifecycleState == filter.lifecycleState &&
-            (filter.listId == null || task.listId == filter.listId) &&
-            (filter.priority == null || task.priority == filter.priority) &&
-            (filter.includeCompleted || !task.completed)
-    }
+    override suspend fun findTasks(
+        filter: TaskFilter,
+        sort: TaskSort,
+    ): List<Task> =
+        tasks.values.filter { task ->
+            task.envelope.lifecycleState == filter.lifecycleState &&
+                (filter.listId == null || task.listId == filter.listId) &&
+                (filter.priority == null || task.priority == filter.priority) &&
+                (filter.includeCompleted || !task.completed)
+        }
 
-    override suspend fun searchTasks(query: String, lifecycleState: EntityLifecycleState): List<Task> =
+    override suspend fun searchTasks(
+        query: String,
+        lifecycleState: EntityLifecycleState,
+    ): List<Task> =
         tasks.values.filter {
             it.envelope.lifecycleState == lifecycleState && it.title.contains(query, ignoreCase = true)
         }

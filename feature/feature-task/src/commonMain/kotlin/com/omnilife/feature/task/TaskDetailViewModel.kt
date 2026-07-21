@@ -42,64 +42,74 @@ public class TaskDetailViewModel(
     public fun dispatch(intent: TaskDetailIntent) {
         when (intent) {
             TaskDetailIntent.Load -> scope.launch { load() }
-            is TaskDetailIntent.ChangeTitle -> scope.launch {
-                updateTaskFields(taskId, TaskFieldEdits(title = Edit.Set(intent.title)))
-                load()
-            }
+            is TaskDetailIntent.ChangeTitle ->
+                scope.launch {
+                    updateTaskFields(taskId, TaskFieldEdits(title = Edit.Set(intent.title)))
+                    load()
+                }
 
-            is TaskDetailIntent.ChangeDueDate -> scope.launch {
-                updateTaskFields(
-                    taskId,
-                    TaskFieldEdits(dueDate = Edit.Set(intent.date), dueTime = Edit.Set(intent.time)),
-                )
-                load()
-            }
+            is TaskDetailIntent.ChangeDueDate ->
+                scope.launch {
+                    updateTaskFields(
+                        taskId,
+                        TaskFieldEdits(dueDate = Edit.Set(intent.date), dueTime = Edit.Set(intent.time)),
+                    )
+                    load()
+                }
 
-            is TaskDetailIntent.ChangePriority -> scope.launch {
-                updateTaskFields(taskId, TaskFieldEdits(priority = Edit.Set(intent.priority)))
-                load()
-            }
+            is TaskDetailIntent.ChangePriority ->
+                scope.launch {
+                    updateTaskFields(taskId, TaskFieldEdits(priority = Edit.Set(intent.priority)))
+                    load()
+                }
 
-            is TaskDetailIntent.ChangeRecurrence -> scope.launch {
-                updateTaskFields(taskId, TaskFieldEdits(recurrenceRule = Edit.Set(intent.rule)))
-                load()
-            }
+            is TaskDetailIntent.ChangeRecurrence ->
+                scope.launch {
+                    updateTaskFields(taskId, TaskFieldEdits(recurrenceRule = Edit.Set(intent.rule)))
+                    load()
+                }
 
-            is TaskDetailIntent.ChangeNotes -> scope.launch {
-                updateTaskFields(taskId, TaskFieldEdits(notes = Edit.Set(intent.notes)))
-                load()
-            }
+            is TaskDetailIntent.ChangeNotes ->
+                scope.launch {
+                    updateTaskFields(taskId, TaskFieldEdits(notes = Edit.Set(intent.notes)))
+                    load()
+                }
 
             is TaskDetailIntent.ChangeNewSubtaskTitle -> _state.update { it.copy(newSubtaskTitle = intent.title) }
 
-            TaskDetailIntent.AddSubtask -> scope.launch {
-                val title = _state.value.newSubtaskTitle
-                if (title.isNotBlank()) {
-                    addSubtask(taskId, title)
-                    _state.update { it.copy(newSubtaskTitle = "") }
+            TaskDetailIntent.AddSubtask ->
+                scope.launch {
+                    val title = _state.value.newSubtaskTitle
+                    if (title.isNotBlank()) {
+                        addSubtask(taskId, title)
+                        _state.update { it.copy(newSubtaskTitle = "") }
+                        load()
+                    }
+                }
+
+            is TaskDetailIntent.ToggleSubtask ->
+                scope.launch {
+                    toggleSubtask(intent.subtaskId, taskId)
                     load()
                 }
-            }
 
-            is TaskDetailIntent.ToggleSubtask -> scope.launch {
-                toggleSubtask(intent.subtaskId, taskId)
-                load()
-            }
+            is TaskDetailIntent.DeleteSubtask ->
+                scope.launch {
+                    deleteSubtask(intent.subtaskId)
+                    load()
+                }
 
-            is TaskDetailIntent.DeleteSubtask -> scope.launch {
-                deleteSubtask(intent.subtaskId)
-                load()
-            }
+            is TaskDetailIntent.ReorderSubtasks ->
+                scope.launch {
+                    reorderSubtasks(taskId, intent.orderedSubtaskIds)
+                    load()
+                }
 
-            is TaskDetailIntent.ReorderSubtasks -> scope.launch {
-                reorderSubtasks(taskId, intent.orderedSubtaskIds)
-                load()
-            }
-
-            TaskDetailIntent.Delete -> scope.launch {
-                deleteTask(taskId)
-                _state.update { it.copy(noLongerAvailable = true) }
-            }
+            TaskDetailIntent.Delete ->
+                scope.launch {
+                    deleteTask(taskId)
+                    _state.update { it.copy(noLongerAvailable = true) }
+                }
         }
     }
 

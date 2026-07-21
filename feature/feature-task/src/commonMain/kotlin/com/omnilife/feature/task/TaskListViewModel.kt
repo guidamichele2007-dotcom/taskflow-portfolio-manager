@@ -52,29 +52,34 @@ public class TaskListViewModel(
 
             is TaskListIntent.Complete -> scope.launch { handleComplete(intent.taskId, completeOpenSubtasks = null) }
 
-            is TaskListIntent.ResolveSubtaskChoice -> scope.launch {
-                handleComplete(intent.taskId, intent.completeOpenSubtasks)
-            }
+            is TaskListIntent.ResolveSubtaskChoice ->
+                scope.launch {
+                    handleComplete(intent.taskId, intent.completeOpenSubtasks)
+                }
 
-            is TaskListIntent.Uncomplete -> scope.launch {
-                uncompleteTask(intent.taskId)
-                refresh()
-            }
+            is TaskListIntent.Uncomplete ->
+                scope.launch {
+                    uncompleteTask(intent.taskId)
+                    refresh()
+                }
 
-            is TaskListIntent.Delete -> scope.launch {
-                deleteTask(intent.taskId)
-                refresh()
-            }
+            is TaskListIntent.Delete ->
+                scope.launch {
+                    deleteTask(intent.taskId)
+                    refresh()
+                }
 
-            is TaskListIntent.Postpone -> scope.launch {
-                postponeTask(intent.taskId, intent.target)
-                refresh()
-            }
+            is TaskListIntent.Postpone ->
+                scope.launch {
+                    postponeTask(intent.taskId, intent.target)
+                    refresh()
+                }
 
-            is TaskListIntent.Reorder -> scope.launch {
-                reorderTasks(intent.orderedTaskIds)
-                refresh()
-            }
+            is TaskListIntent.Reorder ->
+                scope.launch {
+                    reorderTasks(intent.orderedTaskIds)
+                    refresh()
+                }
 
             is TaskListIntent.Search -> {
                 _state.update { it.copy(searchQuery = intent.query) }
@@ -88,7 +93,10 @@ public class TaskListViewModel(
         }
     }
 
-    private suspend fun handleComplete(taskId: EntityId, completeOpenSubtasks: Boolean?) {
+    private suspend fun handleComplete(
+        taskId: EntityId,
+        completeOpenSubtasks: Boolean?,
+    ) {
         val result = completeTask(taskId, completeOpenSubtasks)
         result.onSuccess {
             _state.update { it.copy(pendingSubtaskChoiceForTaskId = null) }
@@ -106,11 +114,12 @@ public class TaskListViewModel(
         val currentState = _state.value
         _state.update { it.copy(isLoading = true) }
         scope.launch {
-            val tasks = getTasksForView(
-                mode = currentState.mode,
-                listId = currentState.filter.listId,
-                priority = currentState.filter.priority,
-            )
+            val tasks =
+                getTasksForView(
+                    mode = currentState.mode,
+                    listId = currentState.filter.listId,
+                    priority = currentState.filter.priority,
+                )
             _state.update { it.copy(isLoading = false, tasks = tasks, errorMessage = null) }
         }
     }
