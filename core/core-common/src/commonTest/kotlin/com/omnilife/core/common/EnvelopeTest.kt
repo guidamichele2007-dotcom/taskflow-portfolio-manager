@@ -6,15 +6,16 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
 class EnvelopeTest {
-    private fun sampleEnvelope() = Envelope(
-        id = "task-1",
-        ownerAccountId = "account-1",
-        schemaVersion = 1,
-        createdAt = Instant.fromEpochMilliseconds(0),
-        createdByDevice = "device-1",
-        modifiedAt = Instant.fromEpochMilliseconds(0),
-        modifiedByDevice = "device-1",
-    )
+    private fun sampleEnvelope() =
+        Envelope(
+            id = "task-1",
+            ownerAccountId = "account-1",
+            schemaVersion = 1,
+            createdAt = Instant.fromEpochMilliseconds(0),
+            createdByDevice = "device-1",
+            modifiedAt = Instant.fromEpochMilliseconds(0),
+            modifiedByDevice = "device-1",
+        )
 
     @Test
     fun `defaults to active lifecycle with no trashedAt`() {

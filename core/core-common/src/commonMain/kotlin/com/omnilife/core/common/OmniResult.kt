@@ -8,13 +8,15 @@ package com.omnilife.core.common
  */
 public sealed class OmniResult<out T> {
     public data class Success<out T>(val value: T) : OmniResult<T>()
+
     public data class Failure(val error: DomainError) : OmniResult<Nothing>()
 }
 
-public inline fun <T, R> OmniResult<T>.map(transform: (T) -> R): OmniResult<R> = when (this) {
-    is OmniResult.Success -> OmniResult.Success(transform(value))
-    is OmniResult.Failure -> this
-}
+public inline fun <T, R> OmniResult<T>.map(transform: (T) -> R): OmniResult<R> =
+    when (this) {
+        is OmniResult.Success -> OmniResult.Success(transform(value))
+        is OmniResult.Failure -> this
+    }
 
 public inline fun <T> OmniResult<T>.onSuccess(action: (T) -> Unit): OmniResult<T> {
     if (this is OmniResult.Success) action(value)
