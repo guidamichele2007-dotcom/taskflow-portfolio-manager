@@ -31,7 +31,11 @@ public data class TaskFieldEdits(
     val notes: Edit<String> = Edit.Unchanged,
 )
 
-private fun <T> Edit<T>.resolve(current: T?): T? = if (this is Edit.Set) value else current
+/** For fields that may themselves be cleared to null (dueDate, dueTime, recurrenceRule, notes). */
+private fun <T> Edit<T>.resolveNullable(current: T?): T? = if (this is Edit.Set) value else current
+
+/** For fields that are never null on [Task] itself (title, priority) — an [Edit.Set] with a null value keeps [current]. */
+private fun <T> Edit<T>.resolve(current: T): T = if (this is Edit.Set) value ?: current else current
 
 public class UpdateTaskFields(private val repository: TaskRepository, private val clock: Clock = Clock.System) {
     public suspend operator fun invoke(
@@ -41,16 +45,16 @@ public class UpdateTaskFields(private val repository: TaskRepository, private va
         val task = repository.findTaskById(taskId) ?: return OmniResult.Failure(TaskError.TaskNotFound(taskId))
 
         val newTitle = edits.title.resolve(task.title)
-        if (newTitle.isNullOrBlank()) return OmniResult.Failure(TaskError.MissingTitle)
+        if (newTitle.isBlank()) return OmniResult.Failure(TaskError.MissingTitle)
 
         val updated =
             task.copy(
                 title = newTitle,
-                dueDate = edits.dueDate.resolve(task.dueDate),
-                dueTime = edits.dueTime.resolve(task.dueTime),
+                dueDate = edits.dueDate.resolveNullable(task.dueDate),
+                dueTime = edits.dueTime.resolveNullable(task.dueTime),
                 priority = edits.priority.resolve(task.priority),
-                recurrenceRule = edits.recurrenceRule.resolve(task.recurrenceRule),
-                notes = edits.notes.resolve(task.notes),
+                recurrenceRule = edits.recurrenceRule.resolveNullable(task.recurrenceRule),
+                notes = edits.notes.resolveNullable(task.notes),
                 envelope = task.envelope.copy(modifiedAt = clock.now()),
             )
         repository.updateTask(updated)
