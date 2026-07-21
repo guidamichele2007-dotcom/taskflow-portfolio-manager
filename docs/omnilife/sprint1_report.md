@@ -52,6 +52,8 @@ Criteri di accettazione della Functional Bible verificati esplicitamente da test
 
 Verifica di qualità eseguita ad ogni passo (non solo alla fine): `detekt` e `ktlint` puliti su `core-common`, `core-eventbus`, `domain-task`, `feature-task` — zero violazioni residue. Due soglie di detekt sono state alzate con motivazione esplicita in [`config/detekt/detekt.yml`](../../config/detekt/detekt.yml) (`TooManyFunctions` per un repository CRUD multi-entità, `ReturnCount`/`LongMethod` per lo stile guard-clause e i dispatcher MVI) — nessuna regola è stata disattivata, solo ricalibrata con motivazione. **Zero warning del compilatore Kotlin** nel codice di questo sprint (un warning residuo sull'API sperimentale di `compilerOptions` esiste in `build-logic`, pre-esistente dal bootstrap, non introdotto qui).
 
+**Verifica finale**: `gradle build` sull'intero repository (tutti i 41 moduli Kotlin del bootstrap, non solo quelli toccati in questo sprint) — `BUILD SUCCESSFUL`, 630 task, nessuna regressione sui moduli placeholder esistenti. `go build`/`go vet`/`go test`/`gofmt`/`golangci-lint` sul backend Go — puliti, invariati rispetto al bootstrap.
+
 ## 4. File creati/modificati
 
 **Nuovi** (63 file sorgente + 4 file di configurazione):
