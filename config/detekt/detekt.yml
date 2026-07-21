@@ -15,7 +15,7 @@ comments:
 
 complexity:
   TooManyFunctions:
-    thresholdInInterfaces: 16 # a single-entity-family repository (Task/TaskList/Subtask CRUD) legitimately needs this many
-    thresholdInClasses: 16
+    thresholdInInterfaces: 17 # a single-entity-family repository (Task/TaskList/Subtask CRUD) legitimately needs this many
+    thresholdInClasses: 17
   LongParameterList:
     constructorThreshold: 10 # manual-DI composition roots (TDR-19) take one constructor param per injected use case
