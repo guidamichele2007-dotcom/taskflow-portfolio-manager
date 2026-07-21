@@ -27,6 +27,7 @@ Questa cartella contiene la base progettuale completa che guida tutte le fasi su
 | — | [Bootstrap Infrastructure Report](bootstrap_infrastructure_report.md) | Il primo codice del repository: workspace Kotlin Multiplatform, app iOS/Android, backend Go, CI, lint — solo infrastruttura, nessuna funzionalità di business. Vedi anche [README-BUILD.md](../../README-BUILD.md) alla radice del repository |
 | — | [Sprint 1 Report — Core Engine + Modulo Attività](sprint1_report.md) | La prima funzionalità reale: Core Engine (Event Bus, envelope, gestione errori), modulo Attività completo (CRUD, sottotask, priorità, ricorrenza, viste, persistenza locale) e stato MVI per le sue schermate — 99 test, TDR-19…21 |
 | — | [Sprint 1 Code Review](sprint1_review.md) | Review tecnica completa del codice Sprint 1: architettura, duplicazioni, complessità, performance, sicurezza, test, debito tecnico — bug oggettivi corretti, problemi progettuali proposti (non implementati), punteggi e priorità per Sprint 2 |
+| — | [Sprint 2 Report — Core UI Kit](sprint2_report.md) | Il Design System trasformato in codice: 22 componenti Compose Multiplatform (`core-designsystem`, TDR-22), token completi (`core-designtokens`), catalogo e gallery — copertura test, componenti mancanti, miglioramenti proposti al Design System |
 
 ---
 

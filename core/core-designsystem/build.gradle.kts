@@ -29,9 +29,14 @@ kotlin {
             // Skiko rendering surface used by desktop compose-ui-test.
             implementation(compose.desktop.currentOs)
         }
-        jvmTest.dependencies {
-            implementation(compose.desktop.uiTestJUnit4)
-        }
+        // jvmTest deliberately has no extra dependency: compose.uiTest
+        // (declared on commonTest above) already provides runComposeUiTest
+        // for the JVM target. compose.desktop.uiTestJUnit4 was tried and
+        // reverted — its transitive graph requires androidx.lifecycle /
+        // androidx.arch.core straight from dl.google.com, which this
+        // sandbox's network policy blocks outright (verified: 403 on
+        // CONNECT, and the same artifacts don't exist on Maven Central
+        // either) — an environmental constraint, not a code issue.
     }
 }
 
