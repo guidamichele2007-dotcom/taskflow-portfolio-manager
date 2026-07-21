@@ -93,7 +93,11 @@ public fun OmniButton(
             OmniProgressDot(color = contentColor)
         } else {
             if (icon != null) {
-                OmniIcon(type = icon, contentDescription = if (text == null) iconContentDescription else null, tint = contentColor)
+                OmniIcon(
+                    type = icon,
+                    contentDescription = if (text == null) iconContentDescription else null,
+                    tint = contentColor,
+                )
                 if (text != null) {
                     Spacer(Modifier.size(OmniTheme.spacing.spazio1))
                 }
@@ -105,7 +109,10 @@ public fun OmniButton(
     }
 }
 
-/** A dedicated, label-less icon button (CMP-PULSANTE "solo icona" variant) — an accessible label is mandatory, never optional. */
+/**
+ * A dedicated, label-less icon button (CMP-PULSANTE "solo icona" variant)
+ * — an accessible label is mandatory, never optional.
+ */
 @Composable
 public fun OmniIconButton(
     icon: OmniIconType,
@@ -116,7 +123,14 @@ public fun OmniIconButton(
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val shape = OmniTheme.shapes.pieno
-    val contentColor = if (enabled) OmniTheme.colors.testoPrimario else OmniTheme.colors.testoPrimario.copy(alpha = OmniOpacity.DISABILITATO)
+    val contentColor =
+        if (enabled) {
+            OmniTheme.colors.testoPrimario
+        } else {
+            OmniTheme.colors.testoPrimario.copy(
+                alpha = OmniOpacity.DISABILITATO,
+            )
+        }
 
     Row(
         modifier =
