@@ -27,12 +27,13 @@ class SearchTasksTest {
         runTest {
             val repository =
                 FakeTaskRepository().apply {
-                    tasks["a"] = Task(
-                        envelope = testEnvelope("a"),
-                        title = "T",
-                        listId = "list-1",
-                        notes = "ask about invoice",
-                    )
+                    tasks["a"] =
+                        Task(
+                            envelope = testEnvelope("a"),
+                            title = "T",
+                            listId = "list-1",
+                            notes = "ask about invoice",
+                        )
                 }
 
             val results = SearchTasks(repository)("invoice")
