@@ -35,7 +35,10 @@ public interface Subscription {
 public interface EventBus {
     public fun <E : DomainEvent> publish(event: E)
 
-    public fun <E : DomainEvent> subscribe(eventType: KClass<E>, subscriber: EventSubscriber<E>): Subscription
+    public fun <E : DomainEvent> subscribe(
+        eventType: KClass<E>,
+        subscriber: EventSubscriber<E>,
+    ): Subscription
 }
 
 public inline fun <reified E : DomainEvent> EventBus.subscribe(subscriber: EventSubscriber<E>): Subscription =

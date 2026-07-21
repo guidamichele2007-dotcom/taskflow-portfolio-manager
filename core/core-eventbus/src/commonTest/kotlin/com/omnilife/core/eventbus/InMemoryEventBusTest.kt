@@ -5,6 +5,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 private data class SampleEvent(val id: String) : DomainEvent
+
 private data class OtherEvent(val id: String) : DomainEvent
 
 class InMemoryEventBusTest {

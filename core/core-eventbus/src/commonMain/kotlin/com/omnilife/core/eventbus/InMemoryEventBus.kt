@@ -26,7 +26,10 @@ public class InMemoryEventBus : EventBus {
         }
     }
 
-    override fun <E : DomainEvent> subscribe(eventType: KClass<E>, subscriber: EventSubscriber<E>): Subscription {
+    override fun <E : DomainEvent> subscribe(
+        eventType: KClass<E>,
+        subscriber: EventSubscriber<E>,
+    ): Subscription {
         val subscribers = subscribersByType.getOrPut(eventType) { mutableListOf() }
         subscribers.add(subscriber)
         return object : Subscription {
