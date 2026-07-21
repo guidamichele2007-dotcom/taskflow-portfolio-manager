@@ -34,7 +34,7 @@ public data class TaskFieldEdits(
 /** For fields that may themselves be cleared to null (dueDate, dueTime, recurrenceRule, notes). */
 private fun <T> Edit<T>.resolveNullable(current: T?): T? = if (this is Edit.Set) value else current
 
-/** For fields that are never null on [Task] itself (title, priority) — an [Edit.Set] with a null value keeps [current]. */
+/** For fields never null on [Task] itself (title, priority) — an [Edit.Set] with a null value keeps [current]. */
 private fun <T> Edit<T>.resolve(current: T): T = if (this is Edit.Set) value ?: current else current
 
 public class UpdateTaskFields(private val repository: TaskRepository, private val clock: Clock = Clock.System) {
