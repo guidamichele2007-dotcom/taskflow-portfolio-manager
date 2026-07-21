@@ -3,6 +3,7 @@ package com.omnilife.domain.task.usecase
 import com.omnilife.core.common.EntityLifecycleState
 import com.omnilife.core.common.OmniResult
 import com.omnilife.core.eventbus.InMemoryEventBus
+import com.omnilife.domain.task.Subtask
 import com.omnilife.domain.task.Task
 import com.omnilife.domain.task.TaskError
 import com.omnilife.domain.task.testEnvelope
@@ -48,7 +49,7 @@ class DeleteTaskTest {
             val repository =
                 FakeTaskRepository().apply {
                     tasks[task.envelope.id] = task
-                    subtasks["sub-1"] = com.omnilife.domain.task.Subtask(id = "sub-1", taskId = "task-1", title = "Step")
+                    subtasks["sub-1"] = Subtask(id = "sub-1", taskId = "task-1", title = "Step")
                 }
 
             PermanentlyDeleteTask(repository)("task-1")

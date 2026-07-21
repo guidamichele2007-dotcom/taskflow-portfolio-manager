@@ -31,6 +31,8 @@ public data class TaskFieldEdits(
     val notes: Edit<String> = Edit.Unchanged,
 )
 
+private fun <T> Edit<T>.resolve(current: T?): T? = if (this is Edit.Set) value else current
+
 public class UpdateTaskFields(private val repository: TaskRepository, private val clock: Clock = Clock.System) {
     public suspend operator fun invoke(
         taskId: EntityId,
@@ -38,17 +40,17 @@ public class UpdateTaskFields(private val repository: TaskRepository, private va
     ): OmniResult<Task> {
         val task = repository.findTaskById(taskId) ?: return OmniResult.Failure(TaskError.TaskNotFound(taskId))
 
-        val newTitle = (edits.title as? Edit.Set)?.value ?: task.title
+        val newTitle = edits.title.resolve(task.title)
         if (newTitle.isNullOrBlank()) return OmniResult.Failure(TaskError.MissingTitle)
 
         val updated =
             task.copy(
                 title = newTitle,
-                dueDate = if (edits.dueDate is Edit.Set) edits.dueDate.value else task.dueDate,
-                dueTime = if (edits.dueTime is Edit.Set) edits.dueTime.value else task.dueTime,
-                priority = (edits.priority as? Edit.Set)?.value ?: task.priority,
-                recurrenceRule = if (edits.recurrenceRule is Edit.Set) edits.recurrenceRule.value else task.recurrenceRule,
-                notes = if (edits.notes is Edit.Set) edits.notes.value else task.notes,
+                dueDate = edits.dueDate.resolve(task.dueDate),
+                dueTime = edits.dueTime.resolve(task.dueTime),
+                priority = edits.priority.resolve(task.priority),
+                recurrenceRule = edits.recurrenceRule.resolve(task.recurrenceRule),
+                notes = edits.notes.resolve(task.notes),
                 envelope = task.envelope.copy(modifiedAt = clock.now()),
             )
         repository.updateTask(updated)
