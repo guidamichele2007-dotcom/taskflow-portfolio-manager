@@ -7,8 +7,10 @@ import com.omnilife.domain.task.Task
 import com.omnilife.domain.task.TaskFilter
 import com.omnilife.domain.task.TaskList
 import com.omnilife.domain.task.TaskPriority
+import com.omnilife.domain.task.TaskSort
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Instant
+import kotlinx.datetime.LocalDate
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -96,6 +98,31 @@ class SqlDelightTaskRepositoryTest {
         }
 
     @Test
+    fun `findTasks combines list id and priority instead of dropping one`() =
+        runTest {
+            repository.insertTask(
+                Task(envelope = envelope("match"), title = "Match", listId = "list-1", priority = TaskPriority.HIGH),
+            )
+            repository.insertTask(
+                // Same list, wrong priority - the SQL branch picked for listId alone would
+                // wrongly include this if the priority filter were dropped.
+                Task(
+                    envelope = envelope("wrong-priority"),
+                    title = "X",
+                    listId = "list-1",
+                    priority = TaskPriority.NONE,
+                ),
+            )
+            repository.insertTask(
+                Task(envelope = envelope("wrong-list"), title = "Y", listId = "list-2", priority = TaskPriority.HIGH),
+            )
+
+            val results = repository.findTasks(TaskFilter(listId = "list-1", priority = TaskPriority.HIGH))
+
+            assertEquals(listOf("match"), results.map { it.envelope.id })
+        }
+
+    @Test
     fun `searchTasks matches on title and notes, case-insensitively`() =
         runTest {
             repository.insertTask(Task(envelope = envelope("a"), title = "Call the Accountant", listId = "list-1"))
@@ -156,5 +183,75 @@ class SqlDelightTaskRepositoryTest {
 
             assertEquals(list, repository.findListById("list-1"))
             assertEquals(listOf(list), repository.findAllLists())
+        }
+
+    @Test
+    fun `TaskSort DUE_DATE orders by due date, undated tasks last`() =
+        runTest {
+            repository.insertTask(Task(envelope = envelope("no-date"), title = "No date", listId = "list-1"))
+            repository.insertTask(
+                Task(envelope = envelope("later"), title = "Later", listId = "list-1", dueDate = LocalDate(2026, 8, 1)),
+            )
+            repository.insertTask(
+                Task(
+                    envelope = envelope("sooner"),
+                    title = "Sooner",
+                    listId = "list-1",
+                    dueDate = LocalDate(2026, 7, 21),
+                ),
+            )
+
+            val ordered = repository.findTasks(sort = TaskSort.DUE_DATE)
+
+            assertEquals(listOf("sooner", "later", "no-date"), ordered.map { it.envelope.id })
+        }
+
+    @Test
+    fun `TaskSort PRIORITY orders highest priority first`() =
+        runTest {
+            repository.insertTask(
+                Task(envelope = envelope("low"), title = "Low", listId = "list-1", priority = TaskPriority.NONE),
+            )
+            repository.insertTask(
+                Task(envelope = envelope("high"), title = "High", listId = "list-1", priority = TaskPriority.HIGH),
+            )
+            repository.insertTask(
+                Task(
+                    envelope = envelope("medium"),
+                    title = "Medium",
+                    listId = "list-1",
+                    priority = TaskPriority.MEDIUM,
+                ),
+            )
+
+            val ordered = repository.findTasks(sort = TaskSort.PRIORITY)
+
+            assertEquals(listOf("high", "medium", "low"), ordered.map { it.envelope.id })
+        }
+
+    @Test
+    fun `TaskSort DEFAULT lets manual order win over due date and priority (INV-10)`() =
+        runTest {
+            repository.insertTask(
+                Task(
+                    envelope = envelope("urgent-no-order"),
+                    title = "Urgent",
+                    listId = "list-1",
+                    priority = TaskPriority.HIGH,
+                ),
+            )
+            repository.insertTask(
+                Task(
+                    envelope = envelope("manually-first"),
+                    title = "Manually first",
+                    listId = "list-1",
+                    priority = TaskPriority.NONE,
+                    manualOrder = 0,
+                ),
+            )
+
+            val ordered = repository.findTasks(sort = TaskSort.DEFAULT)
+
+            assertEquals(listOf("manually-first", "urgent-no-order"), ordered.map { it.envelope.id })
         }
 }

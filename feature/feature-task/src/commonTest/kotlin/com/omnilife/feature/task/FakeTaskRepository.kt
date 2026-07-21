@@ -8,6 +8,7 @@ import com.omnilife.domain.task.TaskFilter
 import com.omnilife.domain.task.TaskList
 import com.omnilife.domain.task.TaskRepository
 import com.omnilife.domain.task.TaskSort
+import com.omnilife.domain.task.sortedByTaskSort
 
 /**
  * In-memory [TaskRepository] for ViewModel tests — mirrors domain-task's
@@ -37,14 +38,15 @@ internal class FakeTaskRepository : TaskRepository {
                 (filter.listId == null || task.listId == filter.listId) &&
                 (filter.priority == null || task.priority == filter.priority) &&
                 (filter.includeCompleted || !task.completed)
-        }
+        }.sortedByTaskSort(sort)
 
     override suspend fun searchTasks(
         query: String,
         lifecycleState: EntityLifecycleState,
     ): List<Task> =
         tasks.values.filter {
-            it.envelope.lifecycleState == lifecycleState && it.title.contains(query, ignoreCase = true)
+            it.envelope.lifecycleState == lifecycleState &&
+                (it.title.contains(query, ignoreCase = true) || it.notes?.contains(query, ignoreCase = true) == true)
         }
 
     override suspend fun permanentlyDeleteTask(id: EntityId) {

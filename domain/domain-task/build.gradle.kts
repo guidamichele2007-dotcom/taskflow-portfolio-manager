@@ -34,7 +34,6 @@ kotlin {
             api(project(":core:core-eventbus"))
             api(libs.kotlinx.datetime)
             api("app.cash.sqldelight:runtime:2.0.2")
-            implementation(project(":core:core-graph"))
             implementation(libs.kotlinx.serialization.json)
         }
         jvmMain.dependencies {

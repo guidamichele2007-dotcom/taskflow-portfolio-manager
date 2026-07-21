@@ -9,6 +9,7 @@ import com.omnilife.domain.task.TaskFilter
 import com.omnilife.domain.task.TaskList
 import com.omnilife.domain.task.TaskRepository
 import com.omnilife.domain.task.TaskSort
+import com.omnilife.domain.task.sortedByTaskSort
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -62,26 +63,23 @@ public class SqlDelightTaskRepository(driver: SqlDriver) : TaskRepository {
         sort: TaskSort,
     ): List<Task> =
         withContext(Dispatchers.Default) {
-            val rows =
-                when {
-                    filter.listId != null ->
-                        queries.selectTasksByLifecycleAndList(filter.lifecycleState.name, filter.listId)
-                            .executeAsList()
+            selectRows(filter)
+                .map { it.toDomain() }
+                .filter { it.matchesFilter(filter) }
+                .sortedByTaskSort(sort)
+        }
 
-                    filter.priority != null ->
-                        queries
-                            .selectTasksByLifecycleAndPriority(filter.lifecycleState.name, filter.priority.name)
-                            .executeAsList()
+    private fun selectRows(filter: TaskFilter) =
+        when {
+            filter.listId != null ->
+                queries.selectTasksByLifecycleAndList(filter.lifecycleState.name, filter.listId).executeAsList()
 
-                    else -> queries.selectTasksByLifecycle(filter.lifecycleState.name).executeAsList()
-                }
-            rows.map { it.toDomain() }
-                .filter { task ->
-                    (filter.includeCompleted || !task.completed) &&
-                        (filter.dueBefore == null || (task.dueDate != null && task.dueDate < filter.dueBefore)) &&
-                        (filter.dueAfter == null || (task.dueDate != null && task.dueDate > filter.dueAfter))
-                }
-                .let { applySort(it, sort) }
+            filter.priority != null ->
+                queries
+                    .selectTasksByLifecycleAndPriority(filter.lifecycleState.name, filter.priority.name)
+                    .executeAsList()
+
+            else -> queries.selectTasksByLifecycle(filter.lifecycleState.name).executeAsList()
         }
 
     override suspend fun searchTasks(
@@ -151,23 +149,15 @@ public class SqlDelightTaskRepository(driver: SqlDriver) : TaskRepository {
         }
 
     override suspend fun updateList(list: TaskList): Unit = insertList(list)
-
-    private fun applySort(
-        tasks: List<Task>,
-        sort: TaskSort,
-    ): List<Task> =
-        when (sort) {
-            TaskSort.DEFAULT ->
-                tasks.sortedWith(
-                    compareBy<Task> { it.manualOrder == null }
-                        .thenBy { it.manualOrder }
-                        .thenBy { it.dueDate == null }
-                        .thenBy { it.dueDate }
-                        .thenByDescending { it.priority.ordinal },
-                )
-
-            TaskSort.DUE_DATE -> tasks.sortedWith(compareBy({ it.dueDate == null }, { it.dueDate }))
-            TaskSort.PRIORITY -> tasks.sortedByDescending { it.priority.ordinal }
-            TaskSort.CREATED_AT -> tasks.sortedBy { it.envelope.createdAt }
-        }
 }
+
+// Re-applied even when SqlDelightTaskRepository.selectRows() already used one of
+// these as its SQL index: when both listId and priority are set, only one of them
+// narrows the query, so the other must still be enforced here or it is silently
+// dropped.
+private fun Task.matchesFilter(filter: TaskFilter): Boolean =
+    (filter.listId == null || listId == filter.listId) &&
+        (filter.priority == null || priority == filter.priority) &&
+        (filter.includeCompleted || !completed) &&
+        (filter.dueBefore == null || (dueDate != null && dueDate < filter.dueBefore)) &&
+        (filter.dueAfter == null || (dueDate != null && dueDate > filter.dueAfter))

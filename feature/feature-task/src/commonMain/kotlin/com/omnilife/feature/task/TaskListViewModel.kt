@@ -1,5 +1,6 @@
 package com.omnilife.feature.task
 
+import com.omnilife.core.common.DomainError
 import com.omnilife.core.common.EntityId
 import com.omnilife.core.common.onFailure
 import com.omnilife.core.common.onSuccess
@@ -39,6 +40,11 @@ public class TaskListViewModel(
     private val _state = MutableStateFlow(TaskListUiState(isLoading = true))
     public val state: StateFlow<TaskListUiState> = _state.asStateFlow()
 
+    // Tracks the current list-loading coroutine (refresh() or search) so a
+    // slower, superseded load can't overwrite the state after a newer one
+    // already completed (e.g. rapidly switching mode/filter/query).
+    private var loadJob: Job? = null
+
     init {
         refresh()
     }
@@ -61,31 +67,31 @@ public class TaskListViewModel(
 
             is TaskListIntent.Uncomplete ->
                 scope.launch {
-                    uncompleteTask(intent.taskId)
+                    uncompleteTask(intent.taskId).onFailure(::reportError)
                     refresh()
                 }
 
             is TaskListIntent.Delete ->
                 scope.launch {
-                    deleteTask(intent.taskId)
+                    deleteTask(intent.taskId).onFailure(::reportError)
                     refresh()
                 }
 
             is TaskListIntent.Postpone ->
                 scope.launch {
-                    postponeTask(intent.taskId, intent.target)
+                    postponeTask(intent.taskId, intent.target).onFailure(::reportError)
                     refresh()
                 }
 
             is TaskListIntent.Reorder ->
                 scope.launch {
-                    reorderTasks(intent.orderedTaskIds)
+                    reorderTasks(intent.orderedTaskIds).onFailure(::reportError)
                     refresh()
                 }
 
             is TaskListIntent.Search -> {
                 _state.update { it.copy(searchQuery = intent.query) }
-                scope.launch { runSearch(intent.query) }
+                runSearch(intent.query)
             }
 
             is TaskListIntent.ChangeFilter -> {
@@ -107,32 +113,42 @@ public class TaskListViewModel(
             if (error is TaskError.OpenSubtasksRequireChoice) {
                 _state.update { it.copy(pendingSubtaskChoiceForTaskId = taskId) }
             } else {
-                _state.update { it.copy(errorMessage = error.message) }
+                reportError(error)
             }
         }
+    }
+
+    private fun reportError(error: DomainError) {
+        _state.update { it.copy(errorMessage = error.message) }
     }
 
     private fun refresh() {
         val currentState = _state.value
         _state.update { it.copy(isLoading = true) }
-        scope.launch {
-            val tasks =
-                getTasksForView(
-                    mode = currentState.mode,
-                    listId = currentState.filter.listId,
-                    priority = currentState.filter.priority,
-                )
-            _state.update { it.copy(isLoading = false, tasks = tasks, errorMessage = null) }
-        }
+        loadJob?.cancel()
+        loadJob =
+            scope.launch {
+                val tasks =
+                    getTasksForView(
+                        mode = currentState.mode,
+                        listId = currentState.filter.listId,
+                        priority = currentState.filter.priority,
+                    )
+                _state.update { it.copy(isLoading = false, tasks = tasks, errorMessage = null) }
+            }
     }
 
-    private suspend fun runSearch(query: String) {
+    private fun runSearch(query: String) {
         if (query.isBlank()) {
             refresh()
             return
         }
-        val results = searchTasks(query)
-        _state.update { it.copy(isLoading = false, tasks = results) }
+        loadJob?.cancel()
+        loadJob =
+            scope.launch {
+                val results = searchTasks(query)
+                _state.update { it.copy(isLoading = false, tasks = results) }
+            }
     }
 
     /** Cancels all in-flight work; call when the screen owning this store is disposed. */

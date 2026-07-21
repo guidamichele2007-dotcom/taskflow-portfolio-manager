@@ -8,6 +8,7 @@ import com.omnilife.domain.task.TaskFilter
 import com.omnilife.domain.task.TaskList
 import com.omnilife.domain.task.TaskRepository
 import com.omnilife.domain.task.TaskSort
+import com.omnilife.domain.task.sortedByTaskSort
 
 /** In-memory [TaskRepository] for use-case unit tests — no SQLDelight/JVM driver involved. */
 internal class FakeTaskRepository : TaskRepository {
@@ -34,7 +35,7 @@ internal class FakeTaskRepository : TaskRepository {
                 (filter.listId == null || task.listId == filter.listId) &&
                 (filter.priority == null || task.priority == filter.priority) &&
                 (filter.includeCompleted || !task.completed)
-        }
+        }.sortedByTaskSort(sort)
 
     override suspend fun searchTasks(
         query: String,

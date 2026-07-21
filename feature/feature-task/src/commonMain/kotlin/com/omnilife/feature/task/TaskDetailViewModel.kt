@@ -1,6 +1,8 @@
 package com.omnilife.feature.task
 
+import com.omnilife.core.common.DomainError
 import com.omnilife.core.common.EntityId
+import com.omnilife.core.common.onFailure
 import com.omnilife.domain.task.TaskRepository
 import com.omnilife.domain.task.usecase.AddSubtask
 import com.omnilife.domain.task.usecase.DeleteSubtask
@@ -44,7 +46,7 @@ public class TaskDetailViewModel(
             TaskDetailIntent.Load -> scope.launch { load() }
             is TaskDetailIntent.ChangeTitle ->
                 scope.launch {
-                    updateTaskFields(taskId, TaskFieldEdits(title = Edit.Set(intent.title)))
+                    updateTaskFields(taskId, TaskFieldEdits(title = Edit.Set(intent.title))).onFailure(::reportError)
                     load()
                 }
 
@@ -53,25 +55,27 @@ public class TaskDetailViewModel(
                     updateTaskFields(
                         taskId,
                         TaskFieldEdits(dueDate = Edit.Set(intent.date), dueTime = Edit.Set(intent.time)),
-                    )
+                    ).onFailure(::reportError)
                     load()
                 }
 
             is TaskDetailIntent.ChangePriority ->
                 scope.launch {
                     updateTaskFields(taskId, TaskFieldEdits(priority = Edit.Set(intent.priority)))
+                        .onFailure(::reportError)
                     load()
                 }
 
             is TaskDetailIntent.ChangeRecurrence ->
                 scope.launch {
                     updateTaskFields(taskId, TaskFieldEdits(recurrenceRule = Edit.Set(intent.rule)))
+                        .onFailure(::reportError)
                     load()
                 }
 
             is TaskDetailIntent.ChangeNotes ->
                 scope.launch {
-                    updateTaskFields(taskId, TaskFieldEdits(notes = Edit.Set(intent.notes)))
+                    updateTaskFields(taskId, TaskFieldEdits(notes = Edit.Set(intent.notes))).onFailure(::reportError)
                     load()
                 }
 
@@ -81,7 +85,7 @@ public class TaskDetailViewModel(
                 scope.launch {
                     val title = _state.value.newSubtaskTitle
                     if (title.isNotBlank()) {
-                        addSubtask(taskId, title)
+                        addSubtask(taskId, title).onFailure(::reportError)
                         _state.update { it.copy(newSubtaskTitle = "") }
                         load()
                     }
@@ -89,28 +93,32 @@ public class TaskDetailViewModel(
 
             is TaskDetailIntent.ToggleSubtask ->
                 scope.launch {
-                    toggleSubtask(intent.subtaskId, taskId)
+                    toggleSubtask(intent.subtaskId, taskId).onFailure(::reportError)
                     load()
                 }
 
             is TaskDetailIntent.DeleteSubtask ->
                 scope.launch {
-                    deleteSubtask(intent.subtaskId)
+                    deleteSubtask(intent.subtaskId).onFailure(::reportError)
                     load()
                 }
 
             is TaskDetailIntent.ReorderSubtasks ->
                 scope.launch {
-                    reorderSubtasks(taskId, intent.orderedSubtaskIds)
+                    reorderSubtasks(taskId, intent.orderedSubtaskIds).onFailure(::reportError)
                     load()
                 }
 
             TaskDetailIntent.Delete ->
                 scope.launch {
-                    deleteTask(taskId)
+                    deleteTask(taskId).onFailure(::reportError)
                     _state.update { it.copy(noLongerAvailable = true) }
                 }
         }
+    }
+
+    private fun reportError(error: DomainError) {
+        _state.update { it.copy(errorMessage = error.message) }
     }
 
     private suspend fun load() {
