@@ -18,6 +18,7 @@ import kotlinx.datetime.LocalTime
  */
 public sealed interface Edit<out T> {
     public data object Unchanged : Edit<Nothing>
+
     public data class Set<T>(val value: T?) : Edit<T>
 }
 
@@ -31,21 +32,25 @@ public data class TaskFieldEdits(
 )
 
 public class UpdateTaskFields(private val repository: TaskRepository, private val clock: Clock = Clock.System) {
-    public suspend operator fun invoke(taskId: EntityId, edits: TaskFieldEdits = TaskFieldEdits()): OmniResult<Task> {
+    public suspend operator fun invoke(
+        taskId: EntityId,
+        edits: TaskFieldEdits = TaskFieldEdits(),
+    ): OmniResult<Task> {
         val task = repository.findTaskById(taskId) ?: return OmniResult.Failure(TaskError.TaskNotFound(taskId))
 
         val newTitle = (edits.title as? Edit.Set)?.value ?: task.title
         if (newTitle.isNullOrBlank()) return OmniResult.Failure(TaskError.MissingTitle)
 
-        val updated = task.copy(
-            title = newTitle,
-            dueDate = if (edits.dueDate is Edit.Set) edits.dueDate.value else task.dueDate,
-            dueTime = if (edits.dueTime is Edit.Set) edits.dueTime.value else task.dueTime,
-            priority = (edits.priority as? Edit.Set)?.value ?: task.priority,
-            recurrenceRule = if (edits.recurrenceRule is Edit.Set) edits.recurrenceRule.value else task.recurrenceRule,
-            notes = if (edits.notes is Edit.Set) edits.notes.value else task.notes,
-            envelope = task.envelope.copy(modifiedAt = clock.now()),
-        )
+        val updated =
+            task.copy(
+                title = newTitle,
+                dueDate = if (edits.dueDate is Edit.Set) edits.dueDate.value else task.dueDate,
+                dueTime = if (edits.dueTime is Edit.Set) edits.dueTime.value else task.dueTime,
+                priority = (edits.priority as? Edit.Set)?.value ?: task.priority,
+                recurrenceRule = if (edits.recurrenceRule is Edit.Set) edits.recurrenceRule.value else task.recurrenceRule,
+                notes = if (edits.notes is Edit.Set) edits.notes.value else task.notes,
+                envelope = task.envelope.copy(modifiedAt = clock.now()),
+            )
         repository.updateTask(updated)
         return OmniResult.Success(updated)
     }

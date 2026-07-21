@@ -1,7 +1,7 @@
 package com.omnilife.domain.task
 
-import com.omnilife.core.common.Envelope
 import com.omnilife.core.common.EntityId
+import com.omnilife.core.common.Envelope
 import kotlinx.datetime.Instant
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalTime

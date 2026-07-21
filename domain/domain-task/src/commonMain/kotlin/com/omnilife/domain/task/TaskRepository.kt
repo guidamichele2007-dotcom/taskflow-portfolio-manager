@@ -21,7 +21,10 @@ public interface TaskRepository {
 
     public suspend fun findTaskById(id: EntityId): Task?
 
-    public suspend fun findTasks(filter: TaskFilter = TaskFilter(), sort: TaskSort = TaskSort.DEFAULT): List<Task>
+    public suspend fun findTasks(
+        filter: TaskFilter = TaskFilter(),
+        sort: TaskSort = TaskSort.DEFAULT,
+    ): List<Task>
 
     /**
      * Local text search over title/notes (TASK-R-05 scope: within this

@@ -14,15 +14,22 @@ import kotlinx.datetime.LocalDate
  * internal month-arithmetic semantics.
  */
 public object RecurrenceCalculator {
-    public fun nextOccurrence(rule: RecurrenceRule, from: LocalDate): LocalDate = when (rule) {
-        is RecurrenceRule.Daily -> addDays(from, 1)
-        is RecurrenceRule.CustomInterval -> addDays(from, rule.days)
-        is RecurrenceRule.Weekly -> nextWeeklyOccurrence(rule, from)
-        is RecurrenceRule.Monthly -> nextMonthlyOccurrence(rule, from)
-        is RecurrenceRule.Yearly -> nextYearlyOccurrence(from)
-    }
+    public fun nextOccurrence(
+        rule: RecurrenceRule,
+        from: LocalDate,
+    ): LocalDate =
+        when (rule) {
+            is RecurrenceRule.Daily -> addDays(from, 1)
+            is RecurrenceRule.CustomInterval -> addDays(from, rule.days)
+            is RecurrenceRule.Weekly -> nextWeeklyOccurrence(rule, from)
+            is RecurrenceRule.Monthly -> nextMonthlyOccurrence(rule, from)
+            is RecurrenceRule.Yearly -> nextYearlyOccurrence(from)
+        }
 
-    private fun nextWeeklyOccurrence(rule: RecurrenceRule.Weekly, from: LocalDate): LocalDate {
+    private fun nextWeeklyOccurrence(
+        rule: RecurrenceRule.Weekly,
+        from: LocalDate,
+    ): LocalDate {
         for (offset in 1..7) {
             val candidate = addDays(from, offset)
             if (candidate.dayOfWeek in rule.daysOfWeek) return candidate
@@ -30,7 +37,10 @@ public object RecurrenceCalculator {
         error("Weekly recurrence has no valid day of week: ${rule.daysOfWeek}")
     }
 
-    private fun nextMonthlyOccurrence(rule: RecurrenceRule.Monthly, from: LocalDate): LocalDate {
+    private fun nextMonthlyOccurrence(
+        rule: RecurrenceRule.Monthly,
+        from: LocalDate,
+    ): LocalDate {
         val (targetYear, targetMonth) = nextMonth(from.year, from.monthNumber)
         val lastDay = daysInMonth(targetYear, targetMonth)
         val day = if (rule.useLastDayOfMonth) lastDay else minOf(rule.dayOfMonth, lastDay)
@@ -45,7 +55,10 @@ public object RecurrenceCalculator {
         return LocalDate(targetYear, month, day)
     }
 
-    private fun addDays(date: LocalDate, days: Int): LocalDate {
+    private fun addDays(
+        date: LocalDate,
+        days: Int,
+    ): LocalDate {
         var year = date.year
         var month = date.monthNumber
         var day = date.dayOfMonth + days
@@ -58,15 +71,21 @@ public object RecurrenceCalculator {
         return LocalDate(year, month, day)
     }
 
-    private fun nextMonth(year: Int, month: Int): Pair<Int, Int> =
-        if (month == 12) (year + 1) to 1 else year to (month + 1)
+    private fun nextMonth(
+        year: Int,
+        month: Int,
+    ): Pair<Int, Int> = if (month == 12) (year + 1) to 1 else year to (month + 1)
 
-    private fun daysInMonth(year: Int, month: Int): Int = when (month) {
-        1, 3, 5, 7, 8, 10, 12 -> 31
-        4, 6, 9, 11 -> 30
-        2 -> if (isLeapYear(year)) 29 else 28
-        else -> error("Invalid month $month")
-    }
+    private fun daysInMonth(
+        year: Int,
+        month: Int,
+    ): Int =
+        when (month) {
+            1, 3, 5, 7, 8, 10, 12 -> 31
+            4, 6, 9, 11 -> 30
+            2 -> if (isLeapYear(year)) 29 else 28
+            else -> error("Invalid month $month")
+        }
 
     private fun isLeapYear(year: Int): Boolean = (year % 4 == 0 && year % 100 != 0) || year % 400 == 0
 }

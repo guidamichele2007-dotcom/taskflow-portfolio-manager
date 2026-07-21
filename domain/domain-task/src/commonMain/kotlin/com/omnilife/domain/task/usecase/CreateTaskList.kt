@@ -20,19 +20,21 @@ public class CreateTaskList(
         area: String? = null,
     ): OmniResult<TaskList> {
         val now = clock.now()
-        val list = TaskList(
-            envelope = Envelope(
-                id = newId(),
-                ownerAccountId = ownerAccountId,
-                schemaVersion = 1,
-                createdAt = now,
-                createdByDevice = deviceId,
-                modifiedAt = now,
-                modifiedByDevice = deviceId,
-            ),
-            name = name,
-            area = area,
-        )
+        val list =
+            TaskList(
+                envelope =
+                    Envelope(
+                        id = newId(),
+                        ownerAccountId = ownerAccountId,
+                        schemaVersion = 1,
+                        createdAt = now,
+                        createdByDevice = deviceId,
+                        modifiedAt = now,
+                        modifiedByDevice = deviceId,
+                    ),
+                name = name,
+                area = area,
+            )
         repository.insertList(list)
         return OmniResult.Success(list)
     }

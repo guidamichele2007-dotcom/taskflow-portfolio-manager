@@ -23,13 +23,15 @@ public class DeleteTask(
     public suspend operator fun invoke(taskId: EntityId): OmniResult<Task> {
         val task = repository.findTaskById(taskId) ?: return OmniResult.Failure(TaskError.TaskNotFound(taskId))
         val now = clock.now()
-        val trashed = task.copy(
-            envelope = task.envelope.copy(
-                lifecycleState = EntityLifecycleState.TRASHED,
-                trashedAt = now,
-                modifiedAt = now,
-            ),
-        )
+        val trashed =
+            task.copy(
+                envelope =
+                    task.envelope.copy(
+                        lifecycleState = EntityLifecycleState.TRASHED,
+                        trashedAt = now,
+                        modifiedAt = now,
+                    ),
+            )
         repository.updateTask(trashed)
         eventBus.publish(TaskEvent.Deleted(taskId, now))
         return OmniResult.Success(trashed)
@@ -41,13 +43,15 @@ public class RestoreTask(private val repository: TaskRepository, private val clo
     public suspend operator fun invoke(taskId: EntityId): OmniResult<Task> {
         val task = repository.findTaskById(taskId) ?: return OmniResult.Failure(TaskError.TaskNotFound(taskId))
         val now = clock.now()
-        val restored = task.copy(
-            envelope = task.envelope.copy(
-                lifecycleState = EntityLifecycleState.ACTIVE,
-                trashedAt = null,
-                modifiedAt = now,
-            ),
-        )
+        val restored =
+            task.copy(
+                envelope =
+                    task.envelope.copy(
+                        lifecycleState = EntityLifecycleState.ACTIVE,
+                        trashedAt = null,
+                        modifiedAt = now,
+                    ),
+            )
         repository.updateTask(restored)
         return OmniResult.Success(restored)
     }

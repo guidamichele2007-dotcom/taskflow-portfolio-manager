@@ -45,25 +45,27 @@ public class CreateTask(
         if (title.isBlank()) return OmniResult.Failure(TaskError.MissingTitle)
 
         val now = clock.now()
-        val task = Task(
-            envelope = Envelope(
-                id = newId(),
-                ownerAccountId = ownerAccountId,
-                schemaVersion = 1,
-                createdAt = now,
-                createdByDevice = deviceId,
-                modifiedAt = now,
-                modifiedByDevice = deviceId,
-            ),
-            title = title,
-            dueDate = details.dueDate,
-            dueTime = details.dueTime,
-            priority = details.priority,
-            recurrenceRule = details.recurrenceRule,
-            listId = listId,
-            notes = details.notes,
-            reminderConfig = details.reminderConfig,
-        )
+        val task =
+            Task(
+                envelope =
+                    Envelope(
+                        id = newId(),
+                        ownerAccountId = ownerAccountId,
+                        schemaVersion = 1,
+                        createdAt = now,
+                        createdByDevice = deviceId,
+                        modifiedAt = now,
+                        modifiedByDevice = deviceId,
+                    ),
+                title = title,
+                dueDate = details.dueDate,
+                dueTime = details.dueTime,
+                priority = details.priority,
+                recurrenceRule = details.recurrenceRule,
+                listId = listId,
+                notes = details.notes,
+                reminderConfig = details.reminderConfig,
+            )
         repository.insertTask(task)
         eventBus.publish(TaskEvent.Created(task.envelope.id, now))
         return OmniResult.Success(task)

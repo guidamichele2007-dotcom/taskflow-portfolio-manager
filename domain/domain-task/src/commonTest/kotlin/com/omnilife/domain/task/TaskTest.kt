@@ -28,35 +28,38 @@ class TaskTest {
 
     @Test
     fun `a task due before today and not completed is overdue`() {
-        val task = Task(
-            envelope = testEnvelope(),
-            title = "Overdue",
-            listId = "list-1",
-            dueDate = LocalDate(2026, 7, 19),
-        )
+        val task =
+            Task(
+                envelope = testEnvelope(),
+                title = "Overdue",
+                listId = "list-1",
+                dueDate = LocalDate(2026, 7, 19),
+            )
         assertTrue(task.isOverdue(LocalDate(2026, 7, 21)))
     }
 
     @Test
     fun `a completed task is never overdue even if its due date has passed`() {
-        val task = Task(
-            envelope = testEnvelope(),
-            title = "Done already",
-            listId = "list-1",
-            dueDate = LocalDate(2026, 7, 19),
-            completed = true,
-        )
+        val task =
+            Task(
+                envelope = testEnvelope(),
+                title = "Done already",
+                listId = "list-1",
+                dueDate = LocalDate(2026, 7, 19),
+                completed = true,
+            )
         assertFalse(task.isOverdue(LocalDate(2026, 7, 21)))
     }
 
     @Test
     fun `a task due today is not overdue`() {
-        val task = Task(
-            envelope = testEnvelope(),
-            title = "Due today",
-            listId = "list-1",
-            dueDate = LocalDate(2026, 7, 21),
-        )
+        val task =
+            Task(
+                envelope = testEnvelope(),
+                title = "Due today",
+                listId = "list-1",
+                dueDate = LocalDate(2026, 7, 21),
+            )
         assertFalse(task.isOverdue(LocalDate(2026, 7, 21)))
     }
 }

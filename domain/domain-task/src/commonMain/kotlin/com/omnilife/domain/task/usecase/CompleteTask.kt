@@ -29,7 +29,10 @@ public class CompleteTask(
     private val newId: () -> EntityId,
     private val clock: Clock = Clock.System,
 ) {
-    public suspend operator fun invoke(taskId: EntityId, completeOpenSubtasks: Boolean? = null): OmniResult<Task> {
+    public suspend operator fun invoke(
+        taskId: EntityId,
+        completeOpenSubtasks: Boolean? = null,
+    ): OmniResult<Task> {
         val task = repository.findTaskById(taskId) ?: return OmniResult.Failure(TaskError.TaskNotFound(taskId))
         if (task.completed) return OmniResult.Success(task)
 
@@ -42,27 +45,30 @@ public class CompleteTask(
         }
 
         val now = clock.now()
-        val updated = task.copy(
-            completed = true,
-            completedAt = now,
-            envelope = task.envelope.copy(modifiedAt = now),
-        )
+        val updated =
+            task.copy(
+                completed = true,
+                completedAt = now,
+                envelope = task.envelope.copy(modifiedAt = now),
+            )
         repository.updateTask(updated)
         eventBus.publish(TaskEvent.Completed(taskId, now))
 
         task.recurrenceRule?.let { rule ->
             val anchor = task.dueDate ?: clock.todayIn(TimeZone.currentSystemDefault())
             val nextDueDate = RecurrenceCalculator.nextOccurrence(rule, anchor)
-            val nextOccurrence = task.copy(
-                envelope = task.envelope.copy(
-                    id = newId(),
-                    createdAt = now,
-                    modifiedAt = now,
-                ),
-                dueDate = nextDueDate,
-                completed = false,
-                completedAt = null,
-            )
+            val nextOccurrence =
+                task.copy(
+                    envelope =
+                        task.envelope.copy(
+                            id = newId(),
+                            createdAt = now,
+                            modifiedAt = now,
+                        ),
+                    dueDate = nextDueDate,
+                    completed = false,
+                    completedAt = null,
+                )
             repository.insertTask(nextOccurrence)
             eventBus.publish(TaskEvent.Created(nextOccurrence.envelope.id, now))
         }

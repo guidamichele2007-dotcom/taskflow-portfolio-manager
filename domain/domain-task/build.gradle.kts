@@ -7,9 +7,10 @@ plugins {
 // Same gating as the omnilife.kmp.module convention plugin (build-logic/) —
 // duplicated here because only this module needs a platform-specific
 // SQLDelight driver dependency; see README-BUILD.md §11.
-val androidSdkAvailable = providers.environmentVariable("ANDROID_HOME").isPresent ||
-    providers.environmentVariable("ANDROID_SDK_ROOT").isPresent ||
-    file("${rootDir}/local.properties").let { it.exists() && it.readText().contains("sdk.dir") }
+val androidSdkAvailable =
+    providers.environmentVariable("ANDROID_HOME").isPresent ||
+        providers.environmentVariable("ANDROID_SDK_ROOT").isPresent ||
+        file("$rootDir/local.properties").let { it.exists() && it.readText().contains("sdk.dir") }
 
 val isMacOsHost = System.getProperty("os.name").contains("Mac", ignoreCase = true)
 
@@ -50,7 +51,6 @@ kotlin {
             }
         }
     }
-
 }
 
 // DatabaseDriverFactory (expect/actual class) is still Beta in Kotlin 2.0.21;

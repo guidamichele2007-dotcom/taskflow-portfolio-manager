@@ -129,7 +129,10 @@ class RecurrenceCalculatorTest {
         assertEquals(expectedMonths, occurrences.map { it.monthNumber })
     }
 
-    private fun daysBetween(a: LocalDate, b: LocalDate): Int {
+    private fun daysBetween(
+        a: LocalDate,
+        b: LocalDate,
+    ): Int {
         var count = 0
         var cursor = a
         while (cursor < b) {
