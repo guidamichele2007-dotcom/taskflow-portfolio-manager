@@ -675,6 +675,55 @@
 
 ---
 
+## TDR-22 · Tecnologia di implementazione del Design System (libreria UI condivisa)
+
+> Nota: decisione presa durante lo Sprint 2 (Core UI Kit). La Design System Bible è esplicitamente indipendente da ogni tecnologia di rendering ("nessun mockup, nessuna schermata, nessun codice/Flutter/SwiftUI/Compose", [00-fondamenta §epigrafe](design_system_bible/00-fondamenta.md)) e rinvia esplicitamente ogni valore fisico e ogni scelta di implementazione alla "fase UI" ([08-report §4](design_system_bible/08-report.md)) — che è esattamente questo sprint. TDR-01 fissa già **SwiftUI nativo per iOS** e **Kotlin/Jetpack Compose nativo per Android** come le due UI native del prodotto: questa voce non riapre quella scelta, decide **come realizzare in codice, verificabile in questo sandbox, la libreria di componenti che quella scelta presuppone**.
+
+**Decisione**: **Compose Multiplatform** (JetBrains, `org.jetbrains.compose` 1.7.1, compatibile con Kotlin 2.0.21 già in uso), targeting **Android** (gated dallo stesso meccanismo `androidSdkAvailable` di ogni altro modulo bootstrap) **+ Desktop/JVM** (sempre attivo, è la nostra superficie di verifica reale in questo sandbox). **Nessun target iOS** in questo modulo: l'interfaccia iOS resta SwiftUI nativa per TDR-01, non toccata da questa decisione — una libreria SwiftUI equivalente, che consumi la stessa fonte di verità di token (§[core-designtokens](../../core/core-designtokens/README.md)), resta un lavoro separato, esplicitamente rinviato (vedi blocco Sprint 3 nel report).
+
+| Alternativa | Descrizione | Esito |
+|---|---|---|
+| **A — Jetpack Compose puro (solo Android), nuovo modulo Android-only** | Aderisce a TDR-01 alla lettera (Compose = tecnologia Android) | ❌ Scartata |
+| **B — Compose Multiplatform (Android + Desktop/JVM)** | Stesso codice Compose (`androidx.compose.*`) di TDR-01 per Android, più un target Desktop che compila/gira su JVM puro senza SDK Android | ✅ Scelta |
+| **C — Doppia libreria nativa parallela (Compose per Android *e* SwiftUI per iOS, scritte entrambe ora)** | Copre entrambe le piattaforme native fin da subito | ❌ Scartata |
+
+**Motivazione**: questo sandbox non ha un SDK Android installato (`ANDROID_HOME`/`ANDROID_SDK_ROOT` assenti, nessun `local.properties` con `sdk.dir` — stessa verifica già fatta per `androidApp` nel bootstrap) né un host macOS/Xcode (Linux, nessun `xcodebuild`). L'opzione A, pur più aderente lessicalmente a TDR-01, sarebbe **interamente non verificabile qui**: un modulo Android-library richiede comunque `android.jar` per compilare, non solo per un'app finale — zero compilazione, zero test, zero anteprima possibili in questo ambiente, esattamente il problema già incontrato (e dichiarato) nello Sprint 1 per le schermate Compose reali. L'opzione C raddoppierebbe il lavoro producendo una metà (SwiftUI) totalmente fittizia: senza `swiftc`/Xcode non è possibile nemmeno verificare che il codice Swift compili, per cui ogni "test"/"anteprima"/"regressione visiva" dichiarata per quella metà sarebbe una finzione — la stessa ragione per cui lo Sprint 1 ha rinviato le schermate reali piuttosto che scriverne di non verificabili. L'opzione B risolve entrambi i problemi: Compose Multiplatform usa **le stesse API `androidx.compose.*`** che TDR-01 già assegna ad Android (non è una tecnologia diversa, è lo stesso Jetpack Compose eseguito anche fuori da un'app Android) — quindi il codice scritto qui **è** l'implementazione Android di TDR-01, non un sostituto — e in più aggiunge un target Desktop/JVM che compila, esegue test (`compose-ui-test`), cattura screenshot (`captureToImage`, verificato funzionante in questo sandbox con `Xvfb` disponibile) e lancia una vera app di anteprima (`GalleryApp`), tutto senza SDK Android né host macOS.
+
+**Vantaggi**: codice reale, compilabile e testabile in questo sandbox oggi, non un segnaposto; il target Desktop diventa il "banco di prova" permanente per il Design System (component gallery eseguibile, test di regressione visiva) indipendentemente dalla disponibilità futura di un SDK Android; quando un SDK Android sarà disponibile, lo stesso codice `commonMain` compila su Android senza modifiche (nessun porting).
+
+**Svantaggi**: introduce una dipendenza esterna (plugin Gradle `org.jetbrains.compose`) non ancora presente nel grafo di build; il target Desktop non è mai uno dei target di produzione del prodotto (TDR-01 non prevede un client desktop) — la sua unica funzione è di verifica per questo sviluppo, non un rilascio; l'interfaccia iOS/SwiftUI resta interamente da scrivere in un secondo momento, e non condivide letteralmente il codice dei componenti (solo la fonte di verità dei token, che è già indipendente da framework).
+
+**Impatto sul progetto**: nuovo modulo `core-designsystem` (accanto a `core-designtokens`, che resta puro Kotlin senza dipendenza da Compose — separazione già implicita nella Design System Bible tra "token" e "implementazione"); nessun modulo `domain-*`/`feature-*` dipende da `core-designsystem` in questo sprint (nessuna schermata reale, per vincolo esplicito del task).
+
+**Rischi**: nessuno strutturale; rischio di manutenzione se una futura versione di Compose Multiplatform introducesse un breaking change prima che TDR-01 stesso evolva — mitigato dal fatto che è la stessa libreria che Android userebbe comunque.
+
+**Costo**: nessuno (open source, Apache 2.0, stesso modello di licenza di Jetpack Compose).
+
+**Facilità di manutenzione**: alta — un solo modulo di componenti condiviso da Android e (in futuro) da qualunque altro target Compose Multiplatform, verificato oggi su Desktop.
+
+**Scalabilità**: piena rispetto al numero di componenti; non introduce alcun limite architetturale nuovo.
+
+**Compatibilità con le Bible**: piena — la Design System Bible non vincola la tecnologia (§00 epigrafe); TDR-01 resta intatto (Android continua a usare Jetpack Compose, iOS resta SwiftUI nativo, non toccato).
+
+### Valori fisici concreti (Design System Bible §[08-report §4.1](design_system_bible/08-report.md), esplicitamente rinviati a questo sprint)
+
+| Decisione | Valore | Motivazione |
+|---|---|---|
+| Unità base di spaziatura `u` | **12dp** | Design System Bible impone `spazio.1 = u` = 1/4 del target di tocco minimo (DS-34, 44pt/48dp); con 48dp scelto come valore di riferimento (già il minimo Android usato altrove nel bootstrap), `u = 48/4 = 12dp` |
+| Scala tipografica (corpo base 16sp) | 32/24/20/16/16/14/12sp per i 7 livelli (rapporti ×2.0/×1.5/×1.25/×1.0/×1.0/×0.875/×0.75 su base 16sp) | 16sp è la dimensione di corpo di sistema convenzionale su entrambe le piattaforme mobile; i rapporti sono quelli già normati in [01-token-visivi §2](design_system_bible/01-token-visivi.md), non reinventati |
+| Elevazione (dp) | 0 / 1 / 4 / 8dp per i 4 livelli | Scostamento crescente coerente con "scostamento tonale + ombra" crescente di [01-token-visivi §4](design_system_bible/01-token-visivi.md); in tema scuro il canale primario resta la variazione tonale (DS-04/25), l'ombra è un canale secondario a bassa opacità |
+| Raggi (`raggio.piccolo/medio/grande`) | `spazio.1`/2, `spazio.2`/2, `spazio.4`/2 = 6/12/24dp | La Bible lega i raggi alla scala di spaziatura ("coerente con", [01-token-visivi §5](design_system_bible/01-token-visivi.md)) senza fissare un rapporto esatto; un dimezzamento sistematico mantiene ogni raggio derivato dalla stessa scala (rispetta DS-INV-02: "nessun valore fuori scala") restando visivamente proporzionato (un raggio identico alla spaziatura piena produrrebbe forme a pillola anche per Card/campi, contraddicendo l'anatomia dichiarata) |
+| `raggio.pieno` | 50% dell'altezza del componente (`CircleShape`/`RoundedCornerShape(percent = 50)`) | Valore già letterale nella Bible |
+| Palette colore (ruoli chiaro/scuro) | Vedi `OmniColors.kt`, `core-designtokens` | Ogni coppia verificata via test automatico di contrasto WCAG (4.5:1 testo normale, 3:1 componenti UI) — vedi §Test sotto. `accento.base` mantiene **lo stesso valore saturo in entrambi i temi** (dichiarato esplicitamente come coppia uguale, non derivato) per garantire `testo.su_accento` bianco affidabile in entrambi i temi con un solo valore verificato — DS-27 permette (non impone) un accento desaturato in scuro; questa scelta rinuncia a quell'opzione per una garanzia di contrasto più semplice da verificare meccanicamente, rivalutabile in un futuro sprint |
+| `accento.base`, insieme chiuso (SET-001 §2) | 6 opzioni: Blu, Verde, Viola, Corallo, Petrolio, Indaco | Scelte per restare visivamente distinte da `stato.attenzione` (ambra) e `stato.critico` (rosso), come richiesto implicitamente da DS-INV-05 (un'opzione utente non deve poter essere confusa con un colore di stato semantico) |
+| Font family | `FontFamily.Default` (font di sistema della piattaforma) | DS-03 impone "un solo font di sistema", senza sceglierne uno specifico; il font di sistema evita di dover distribuire asset font cross-piattaforma per un beneficio estetico non richiesto da alcuna Bible |
+| Set iconografico | Set minimale proprietario, disegnato come `ImageVector` a tratto singolo uniforme (`OmniIcons.kt`) | DS-05/09 impongono un solo set monocromatico a tratto uniforme, senza specificare quale libreria; un piccolo set fatto a mano in Kotlin evita di introdurre una pipeline di asset (font icon o SVG) cross-piattaforma per le ~15 icone effettivamente usate dai componenti di questo sprint — estendibile senza cambiare tecnologia quando servirà un set più ampio |
+| Durate/curve di motion | Vedi `OmniMotion.kt` | Valori già normativi in UX Bible MUC §4/Design System Bible §03, tradotti in `AnimationSpec` di Compose (spring/tween) senza reinterpretarli |
+
+**Verifica di contrasto**: ogni coppia di colore chiaro/scuro è verificata da un test automatico (`ColorContrastTest`, `core-designtokens`) che calcola il rapporto di contrasto WCAG 2.1 e asserisce ≥4.5:1 per testo normale, ≥3:1 per componenti UI/bordo di focus — non una verifica manuale una tantum, ma un test che fallisce la build se un valore futuro regredisse (DS-26: "verifica indipendente chiaro/scuro obbligatoria").
+
+---
+
 ## Tabella Finale — Decisioni Tecnologiche Approvate
 
 | ID | Area | Decisione approvata |
@@ -700,8 +749,9 @@
 | TDR-19 | Dependency Injection | Injection manuale via costruttore, composition root per piattaforma (nessun framework) |
 | TDR-20 | Libreria di accesso SQLite (KMP) | SQLDelight |
 | TDR-21 | Tipo di errore per i casi d'uso | `Result` sigillato dedicato (`OmniResult<T>`), non eccezioni |
+| TDR-22 | Tecnologia di implementazione del Design System | Compose Multiplatform (Android + Desktop/JVM); iOS resta SwiftUI nativo, non toccato |
 
-**Nota sulle voci TDR-19…21**: a differenza di TDR-01…18 (decise tutte insieme, prima di ogni riga di codice), queste tre voci sono state aggiunte durante lo Sprint 1 (Core Engine + Modulo Attività) quando l'implementazione ha incontrato una decisione tecnica non coperta dalle Bible esistenti. Seguono lo stesso metodo (≥3 alternative, motivazione contro la documentazione esistente) e la stessa autorità delle prime 18.
+**Nota sulle voci TDR-19…22**: a differenza di TDR-01…18 (decise tutte insieme, prima di ogni riga di codice), queste voci sono state aggiunte durante gli sprint di sviluppo reale (TDR-19…21 nello Sprint 1, TDR-22 nello Sprint 2) quando l'implementazione ha incontrato una decisione tecnica non coperta dalle Bible esistenti. Seguono lo stesso metodo (≥3 alternative, motivazione contro la documentazione esistente) e la stessa autorità delle prime 18.
 
 **Filo conduttore delle 18 decisioni originarie**: ovunque esistesse una scelta tra (a) controllo diretto/open-source/portabile e (b) comodità tramite un fornitore proprietario di terze parti, è stata preferita (a) — coerenza diretta con l'indipendenza tecnologica ed economica già rivendicata in tutta la documentazione precedente (Product Constitution, Business Strategy, Technical Architecture Bible). Nessuna decisione introduce un fornitore con visibilità sui contenuti utente; ogni decisione è stata verificata contro almeno una Bible esistente e non ne contraddice alcuna.
 

@@ -37,6 +37,7 @@ include(":core:core-sync")
 include(":core:core-backup")
 include(":core:core-security")
 include(":core:core-designtokens")
+include(":core:core-designsystem")
 include(":core:core-testing")
 
 // ---------------------------------------------------------------------------
