@@ -80,13 +80,16 @@ public class SqlDelightSearchIndex(driver: SqlDriver) : SearchIndexer, UnifiedSe
             .filter { filter.category == null || it.category == filter.category }
             .filter { filter.includeArchivedOrTrashed || it.lifecycleState == "ACTIVE" }
             .map { row ->
+                // FTS5 columns are nullable to SQLite regardless of typename (no NOT
+                // NULL support on virtual tables) — these are never actually null,
+                // insertEntry always binds every column.
                 SearchResult(
-                    id = row.entityId,
-                    entityType = row.entityType,
-                    title = row.title ?: "",
+                    id = requireNotNull(row.entityId),
+                    entityType = requireNotNull(row.entityType),
+                    title = row.title.orEmpty(),
                     category = row.category,
-                    lifecycleState = row.lifecycleState,
-                    modifiedAt = Instant.fromEpochSeconds(row.modifiedAtEpochSeconds),
+                    lifecycleState = requireNotNull(row.lifecycleState),
+                    modifiedAt = Instant.fromEpochSeconds(requireNotNull(row.modifiedAtEpochSeconds)),
                 )
             }.sortedWith(rankingComparator(trimmed))
             .toList()

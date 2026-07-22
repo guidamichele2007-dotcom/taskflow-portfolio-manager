@@ -3,15 +3,18 @@
 -- Data Model Bible §11 — never a source of truth). Generic across every
 -- module: no column here is specific to Task/Note/Finance/etc.
 
+-- Every column needs an explicit typename or SQLDelight's interface
+-- generator fails (typenames are optional to SQLite itself for FTS5, but
+-- required here — see sqldelight/sqldelight#4001).
 CREATE VIRTUAL TABLE searchIndexEntry USING fts5(
-    entityId UNINDEXED,
-    entityType UNINDEXED,
-    title,
-    content,
-    category UNINDEXED,
-    lifecycleState UNINDEXED,
-    createdAtEpochSeconds UNINDEXED,
-    modifiedAtEpochSeconds UNINDEXED
+    entityId TEXT UNINDEXED,
+    entityType TEXT UNINDEXED,
+    title TEXT,
+    content TEXT,
+    category TEXT UNINDEXED,
+    lifecycleState TEXT UNINDEXED,
+    createdAtEpochSeconds INTEGER UNINDEXED,
+    modifiedAtEpochSeconds INTEGER UNINDEXED
 );
 
 removeEntry:
