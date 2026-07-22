@@ -726,6 +726,136 @@
 
 ---
 
+## TDR-23 · Primitive crittografiche concrete per il Servizio di Sicurezza
+
+> Nota: decisione presa durante lo Sprint 3 (Core Platform). Technical Architecture Bible §10 e 06-sicurezza-e-privacy.md fissano la **gerarchia** di chiavi (credenziali → Master Key → KEK/DEK per dominio → Recovery Key) e la citano con due algoritmi *alternativi* per ciascun anello ("SQLCipher o cifratura a livello di pagina"; "XChaCha20-Poly1305 / AES-256-GCM"; KDF non nominata se non come "Argon2id" in un solo documento di prodotto, non nel TDR originario) — TDR-06/10-sicurezza-architetturale.md dichiarano esplicitamente rinviata "la libreria crittografica, l'algoritmo specifico" a una "design review crittografica esterna di Fase 0" mai eseguita in questo repository. Questa voce sceglie le primitive concrete necessarie per avere un `core-security` reale e verificabile in questo sandbox (nessun SDK Android, nessun host macOS/Xcode — stesso vincolo ambientale di Sprint 1/2).
+
+**Decisione**: cifratura simmetrica **AES-256-GCM**, KDF **PBKDF2WithHmacSHA256** (600.000 iterazioni, [OWASP 2023](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html)), entrambe via `javax.crypto`/JCE — nessuna libreria di terze parti aggiunta.
+
+| Alternativa | Descrizione | Esito |
+|---|---|---|
+| **A — AES-256-GCM + PBKDF2WithHmacSHA256 (JCE nativo)** | Entrambe le primitive già incluse in ogni JDK/Android runtime, nessuna dipendenza esterna | ✅ Scelta |
+| **B — XChaCha20-Poly1305 + Argon2id (libreria esterna, es. libsodium-jni/BouncyCastle)** | Le primitive citate nel documento di prodotto come esempio; resistenza teorica migliore ad attacchi hardware-accelerati (Argon2id vs PBKDF2) | ❌ Scartata (per ora) |
+| **C — Deferire l'intera implementazione crittografica fino alla design review esterna** | Non implementare nulla finché una review di sicurezza dedicata non conferma le primitive | ❌ Scartata |
+
+**Motivazione**: nessuna Bible impone un algoritmo specifico — entrambe le coppie (A/B) sono esplicitamente presentate come alternative equivalenti nella documentazione esistente, la scelta è a questo livello un compromesso costo/verificabilità, non una violazione. **A** è disponibile su ogni target JVM/Android senza aggiungere una dipendenza (rilevante: questo sandbox non ha un SDK Android — solo il target JVM è compilabile/verificabile qui, esattamente come per SQLDelight in Sprint 1 e Compose Multiplatform in Sprint 2) ed è comunque un algoritmo NIST-approvato, non un compromesso di sicurezza reale per il perimetro di questo sprint. **B** (XChaCha20-Poly1305/Argon2id) resta preferibile a lungo termine (Argon2id resiste meglio ad attacchi con hardware dedicato) ma richiederebbe una libreria multiplatform con binding nativi per iOS/Android non verificabili in questo sandbox, aggiungendo rischio di supply-chain senza poter compilare/testare il binding stesso qui. **C** contraddice il mandato esplicito del task ("implementa" i sei sottosistemi, non solo l'interfaccia) e lascerebbe `core-security` un'interfaccia vuota per il terzo sprint di fila.
+
+**Vantaggi**: zero dipendenze esterne aggiuntive (stesso principio già seguito in TDR-19); l'implementazione JVM è interamente verificabile in questo sandbox (test reali, non solo compilazione); AES-256-GCM è AEAD (autenticato, rileva manomissioni) esattamente come richiesto implicitamente da "cifra questo blob" (10-sicurezza-architetturale.md §3).
+
+**Svantaggi**: PBKDF2 è più debole di Argon2id contro attacchi con GPU/ASIC dedicati (mitigato dall'iterazione a 600k, il minimo raccomandato OWASP 2023 per PBKDF2-SHA256); nessun binding hardware (Secure Enclave/StrongBox) è raggiungibile da `javax.crypto` puro — quello resta un'implementazione `expect/actual` per piattaforma, scritta ma non verificabile qui (stesso gating di `DatabaseDriverFactory`).
+
+**Impatto sul progetto**: `CryptoService` (interfaccia comune) + `JvmCryptoService`/implementazione reale testata; `KeyManager` costruisce la gerarchia KEK/DEK sopra `CryptoService` via envelope encryption; gli `actual` Android (Keystore/BiometricPrompt) e iOS (Keychain/Security.framework via cinterop) sono scritti come stub dichiaratamente non verificati, coerenti con README-BUILD.md §4.
+
+**Nota sul database cifrato**: TDR-06 richiede cifratura SQLite **a livello di pagina** (richiede una libreria come SQLCipher, che porta binari nativi per piattaforma). Nessun binario nativo è installabile/verificabile in questo sandbox JVM-only. Questo sprint implementa quindi **cifratura a livello di campo/blob applicativa** (`FieldCipher`, sopra `CryptoService`) come componente riutilizzabile e reale — non ancora collegata a `domain-task` (fuori perimetro esplicito di questo sprint: "non implementare Note/Calendario/Finanze"; wiring di un modulo `domain-*` esistente non è tra i sei sottosistemi richiesti). La cifratura SQLCipher a livello di pagina resta un blocco per un futuro sprint quando un host in grado di linkare una libreria nativa sarà disponibile.
+
+**Rischi**: nessuno strutturale; rischio di manutenzione se una futura verifica di sicurezza esterna (già prevista da TDR-04) richiedesse di migrare a B — mitigato dal fatto che `CryptoService` è un'interfaccia, la migrazione è un nuovo `actual`, non un redesign.
+
+**Costo**: nessuno (JCE incluso in ogni JVM/Android runtime).
+
+**Facilità di manutenzione**: alta — una sola implementazione JVM-verificata, nessuna libreria esterna da aggiornare.
+
+**Scalabilità**: adeguata; AES-256-GCM e PBKDF2 sono entrambi comprovati ai volumi dichiarati (MFC-E-14).
+
+**Compatibilità con le Bible**: piena — nessuna Bible fissa l'algoritmo, solo la gerarchia e le proprietà (mai chiavi condivise come valore, envelope encryption rotabile); entrambe rispettate.
+
+---
+
+## TDR-24 · Struttura concreta del clock logico e dei tipi CRDT per il Motore di Sincronizzazione
+
+> Nota: decisione presa durante lo Sprint 3. Data Model Bible §11 §7 e Technical Architecture Bible §05 §6 dichiarano esplicitamente rinviato "il tipo esatto di struttura dati per la convergenza (CRDT state-based vs operation-based)" e "il formato dei vettori di versione" — normano solo la strategia per tipo di campo (LWW per-campo con vettori di versione logici **non wall-clock**, OR-Set per i GraphLink, snapshot con storico per le Note), non la rappresentazione concreta.
+
+**Decisione**: `LogicalTimestamp(counter: Long, deviceId: String)` con confronto lessicografico (counter, poi deviceId come tie-break deterministico) come "vettore di versione" minimo; `LwwRegister<T>` per campo scalare; `ORSet<T>` con tag univoci e tombstone per i GraphLink; `SnapshotHistory<T>` (LWW sull'intero snapshot + storico delle versioni perdenti) per le Note — merge per paragrafo esplicitamente **non** implementato in questo sprint (proposta, non implementata, vedi report).
+
+| Alternativa | Descrizione | Esito |
+|---|---|---|
+| **A — Clock logico minimale per-entità `(counter, deviceId)` + CRDT specializzati (LWW/OR-Set/Snapshot) scritti a mano** | Esattamente la scelta TDR-05 ("CRDT minimale su misura... non una libreria generica"), qui resa concreta | ✅ Scelta |
+| **B — Vettori di versione completi (un contatore per ogni dispositivo conosciuto, tipo vector clock classico)** | Precisione causale completa, rileva ogni concorrenza | ❌ Scartata (per ora) |
+| **C — Libreria CRDT generica (Automerge/Yjs-class)** | Già scartata esplicitamente da TDR-05 | ❌ Scartata (coerenza con TDR-05) |
+
+**Motivazione**: TDR-05 ha già scartato **C** con motivazione propria (superficie/audit sproporzionati); questa voce sceglie tra **A** e **B** per il "vettore di versione" citato ma non specificato. **B** (vector clock completo, un contatore per dispositivo) offre precisione causale superiore ma richiede propagare l'insieme crescente di dispositivi conosciuti in ogni entità sincronizzata — un costo di spazio e complessità che nessuna Bible richiede esplicitamente (il requisito è solo "non wall-clock", "l'ordine di arrivo non altera il risultato finale", entrambi soddisfatti da **A**). **A** soddisfa ogni proprietà testata esplicitamente richiesta (commutatività, niente paradossi da orologio di sistema errato, MFC-E-10) con una struttura an ordine di grandezza più semplice da implementare e verificare con test generativi in questo sprint.
+
+**Vantaggi**: `LogicalTimestamp` è comparabile e serializzabile banalmente; `LwwRegister`/`ORSet`/`SnapshotHistory` sono ciascuno pochi metodi, testati per commutatività (`merge(a,b) == merge(b,a)`) e idempotenza (`merge(a,a) == a`) — le due proprietà che una vera implementazione CRDT deve garantire.
+
+**Svantaggi**: un vector clock completo (B) rileverebbe la concorrenza in casi limite che un contatore singolo per entità non distingue (due dispositivi che scrivono campi diversi nello stesso "tick" logico) — accettabile perché il merge è comunque per-campo (ogni campo ha il proprio `LwwRegister`, non uno condiviso per l'intera entità), quindi la finestra di ambiguità è già ridotta all'osso.
+
+**Impatto sul progetto**: `core-sync` espone questi tipi come API pubblica pura (nessuna dipendenza da `domain-task` o da alcun modulo `domain-*`); un futuro modulo dominio adotterà `LwwRegister`/`ORSet` sostituendo gradualmente i campi scalari del proprio envelope — non fatto in questo sprint (fuori perimetro esplicito).
+
+**Rischi**: nessuno strutturale; il fallback dichiarato da TDR-05 ("rinuncia all'OR-Set sui link, solo LWW") resta disponibile senza modificare l'API pubblica (un `ORSet` degenere a un solo elemento si comporta come un LWW).
+
+**Costo**: nessuno.
+
+**Facilità di manutenzione**: alta — tre tipi generici piccoli, ciascuno con test di convergenza dedicati.
+
+**Scalabilità**: neutra rispetto al numero di entità; cresce linearmente con il numero di campi CRDT per entità, non con il numero di dispositivi (a differenza di B).
+
+**Compatibilità con le Bible**: piena — rispetta letteralmente la tabella di strategia per tipo di campo di Data Model Bible §11 §6.
+
+---
+
+## TDR-25 · Tecnologia e algoritmo di ranking per il Servizio di Ricerca
+
+> Nota: decisione presa durante lo Sprint 3. TDR-06 fissa già "SQLite cifrato + estensione FTS" per l'indice di ricerca (non rinviato); resta aperto solo (Data Model Bible/Technical Architecture Bible non lo specificano): quale estensione FTS, quale tokenizzatore, e come tradurre la regola di ranking a 3 assi (SRCH-001: titolo>contenuto, recente>vecchio, attivo>archiviato — mai un punteggio opaco, C-art. 6) in codice.
+
+**Decisione**: **SQLite FTS5** (via SQLDelight, stesso driver JDBC già verificato in questo sandbox dallo Sprint 1) con tokenizzatore `unicode61` di default; **ranking non-bm25**: un comparatore Kotlin esplicito a 3 chiavi (titolo-match booleano, poi `modifiedAt` decrescente, poi `lifecycleState` attivo-prima), mai il punteggio `bm25()` nativo di FTS5 usato come ordinamento finale.
+
+| Alternativa | Descrizione | Esito |
+|---|---|---|
+| **A — FTS5 + comparatore esplicito a 3 assi (bm25 solo per il pre-filtro dei candidati)** | FTS5 seleziona i documenti che matchano, un comparatore Kotlin li ordina secondo la regola fissa della Bible | ✅ Scelta |
+| **B — FTS5 + ranking nativo `bm25()`** | Più semplice (un `ORDER BY rank`), ma bm25 è un punteggio di rilevanza statistico opaco | ❌ Scartata |
+| **C — Indice costruito a mano (inverted index in Kotlin puro, senza FTS)** | Evita SQL, controllo totale sul ranking | ❌ Scartata |
+
+**Motivazione**: SRCH-001 vieta esplicitamente "una 'rilevanza' opaca" (C-art. 6, "mai un punteggio aggregato senza spiegazione disponibile") — `bm25()` (**B**) è per definizione un punteggio statistico non decomponibile nelle tre regole dichiarate, quindi non conforme anche se più semplice da implementare. **A** usa FTS5 solo per la selezione (match/non-match, già efficiente e verificato ai volumi dichiarati da TDR-06) e delega l'ordinamento a un comparatore Kotlin esplicito e leggibile — ogni riga del risultato è ordinabile "spiegando" esattamente perché precede la successiva. **C** reinventerebbe un motore di ricerca full-text da zero, senza alcun vantaggio dato che TDR-06 ha già scelto SQLite+FTS come motore.
+
+**Vantaggi**: il ranking è un comparatore testabile isolatamente (nessuna query SQL da eseguire per verificarne la correttezza); FTS5 resta comprovato al volume dichiarato (MFC-AC-07, 50.000 entità, verificato con benchmark reale in questo sprint — vedi report); query sanitizzate esplicitamente prima di raggiungere `MATCH` (ogni token viene racchiuso in doppi apici e i caratteri speciali di FTS5 — `" * ^ NEAR AND OR NOT -`* — sono trattati come letterali, mai sintassi di query, coerente con MFC-E-17 "mai injection nei campi di ricerca").
+
+**Svantaggi**: il comparatore Kotlin esegue un secondo passaggio in memoria dopo la query SQL (accettabile ai volumi dichiarati, non a milioni di righe — ma nessuna Bible richiede quella scala per un'app locale mono-utente).
+
+**Impatto sul progetto**: `core-search` espone `IndexableEntity` (contratto generico, nessuna dipendenza da `domain-task`), uno schema `.sq` con tabella FTS5 virtuale, e un `SearchIndexer`/`UnifiedSearchService` — nessun modulo `domain-*` è stato modificato per usarlo in questo sprint (il collegamento a `domain-task` resta un blocco per Sprint 4, coerente con "non implementare Note/Calendario/Finanze/Home").
+
+**Rischi**: nessuno strutturale; se il volume reale superasse quanto testato, il comparatore Kotlin (non l'indice FTS) sarebbe il primo collo di bottiglia — mitigabile spingendo più ordinamento nel SQL nativo in un secondo momento senza cambiare l'API pubblica.
+
+**Costo**: nessuno (FTS5 incluso in SQLite/SQLDelight, già una dipendenza del progetto da TDR-20).
+
+**Facilità di manutenzione**: alta — un solo file di schema, un solo comparatore.
+
+**Scalabilità**: verificata fino a 50.000 entità sintetiche in questo sprint (vedi benchmark nel report); MFC-E-14 (100.000+) non ancora misurato.
+
+**Compatibilità con le Bible**: piena — rispetta la regola di ranking a 3 assi letteralmente, non un'approssimazione.
+
+---
+
+## TDR-26 · Meccanismo di scheduling delle notifiche locali
+
+> Nota: decisione presa durante lo Sprint 3. TDR-09 decide solo il **trasporto push remoto** (APNs/FCM dietro relay, usato esclusivamente come trigger di sync silenzioso, MAI contenuto) — nessuna Bible/TDR specifica come una notifica **locale** (NTF-001…008, generata interamente sul device) viene effettivamente schedulata dal sistema operativo. Questa voce colma quel vuoto per la parte piattaforma-specifica; la logica di budget/digest/silenzi resta Kotlin puro, indipendente da questa decisione.
+
+**Decisione**: `NotificationScheduler` come interfaccia `expect`/`actual` per piattaforma — `actual` JVM basato su `java.util.concurrent.ScheduledExecutorService` (reale, verificato in questo sandbox, utile anche per lo sviluppo desktop futuro); `actual` Android basato su `AlarmManager`/`WorkManager` e `actual` iOS basato su `UNUserNotificationCenter` **scritti ma non verificabili** in questo sandbox (nessun SDK/host), stesso gating già applicato a `DatabaseDriverFactory` (Sprint 1) e ai target Compose (Sprint 2).
+
+| Alternativa | Descrizione | Esito |
+|---|---|---|
+| **A — `expect`/`actual` per piattaforma, JVM reale + Android/iOS scritti non verificati** | Coerente con il gating già stabilito in tutto il progetto per codice piattaforma-specifico | ✅ Scelta |
+| **B — Solo interfaccia, nessuna implementazione JVM** | Eviterebbe di scrivere codice non immediatamente utile a un'app mobile | ❌ Scartata |
+| **C — Libreria di scheduling cross-platform di terze parti** | Nessuna libreria del genere è KMP-nativa per lo scheduling di notifiche di sistema (è intrinsecamente piattaforma-specifico) | ❌ Scartata (non esiste un'opzione realistica) |
+
+**Motivazione**: **B** lascerebbe `core-notifications` senza alcuna implementazione verificabile in questo sandbox, ripetendo il problema già risolto altrove scegliendo sempre di avere almeno un `actual` reale e testato (SQLDelight JVM driver, Compose Desktop). **C** non è un'opzione reale: lo scheduling di notifiche di sistema è per natura un'API per-piattaforma (non esiste un livello di astrazione KMP maturo per questo). **A** applica lo stesso pattern già consolidato: business logic condivisa e testata al 100%, punto di contatto con il sistema operativo isolato dietro un'interfaccia minima.
+
+**Vantaggi**: la logica di decisione (budget, digest, silenzi, auto-disattivazione) è interamente in Kotlin puro e testata al 100% indipendentemente da quale scheduler concreto la esegue; l'`actual` JVM è reale e permette di verificare l'intero ciclo request→decisione→schedulazione→callback in questo sandbox.
+
+**Svantaggi**: gli `actual` Android/iOS non sono verificati (stesso limite ambientale di ogni sprint precedente, non nuovo).
+
+**Impatto sul progetto**: `core-notifications` espone `NotificationBroker` (decisione pura) + `NotificationScheduler` (I/O, expect/actual) — nessun modulo `domain-*` pubblica ancora eventi `ntf.request` in questo sprint (richiederebbe modificare `domain-task`, fuori perimetro); il contratto evento (`NtfRequested`/`NtfActionPerformed`) è definito e pronto, il collegamento resta un blocco per Sprint 4.
+
+**Rischi**: nessuno strutturale.
+
+**Costo**: nessuno.
+
+**Facilità di manutenzione**: alta.
+
+**Scalabilità**: adeguata al budget dichiarato (max 10 notifiche/giorno per utente, NTF-002) — non un problema di scala.
+
+**Compatibilità con le Bible**: piena — NTF-001…008 rispettati dalla logica di decisione; TDR-09 non toccato (resta il trasporto push remoto, concettualmente separato).
+
+---
+
 ## Tabella Finale — Decisioni Tecnologiche Approvate
 
 | ID | Area | Decisione approvata |
@@ -752,8 +882,12 @@
 | TDR-20 | Libreria di accesso SQLite (KMP) | SQLDelight |
 | TDR-21 | Tipo di errore per i casi d'uso | `Result` sigillato dedicato (`OmniResult<T>`), non eccezioni |
 | TDR-22 | Tecnologia di implementazione del Design System | Compose Multiplatform (Android + Desktop/JVM); iOS resta SwiftUI nativo, non toccato |
+| TDR-23 | Primitive crittografiche concrete (core-security) | AES-256-GCM + PBKDF2WithHmacSHA256 (JCE nativo, 600k iterazioni); cifratura DB a livello di campo applicativa, SQLCipher a livello di pagina resta blocco futuro |
+| TDR-24 | Struttura del clock logico e dei tipi CRDT (core-sync) | `LogicalTimestamp(counter, deviceId)`; `LwwRegister`/`ORSet`/`SnapshotHistory` scritti a mano, coerenti con TDR-05 |
+| TDR-25 | Tecnologia e ranking di ricerca (core-search) | SQLite FTS5 via SQLDelight; ranking a comparatore esplicito a 3 assi, mai bm25 nativo |
+| TDR-26 | Meccanismo di scheduling notifiche locali (core-notifications) | `expect`/`actual` per piattaforma; JVM reale (ScheduledExecutorService), Android/iOS scritti non verificati |
 
-**Nota sulle voci TDR-19…22**: a differenza di TDR-01…18 (decise tutte insieme, prima di ogni riga di codice), queste voci sono state aggiunte durante gli sprint di sviluppo reale (TDR-19…21 nello Sprint 1, TDR-22 nello Sprint 2) quando l'implementazione ha incontrato una decisione tecnica non coperta dalle Bible esistenti. Seguono lo stesso metodo (≥3 alternative, motivazione contro la documentazione esistente) e la stessa autorità delle prime 18.
+**Nota sulle voci TDR-19…26**: a differenza di TDR-01…18 (decise tutte insieme, prima di ogni riga di codice), queste voci sono state aggiunte durante gli sprint di sviluppo reale (TDR-19…21 nello Sprint 1, TDR-22 nello Sprint 2, TDR-23…26 nello Sprint 3) quando l'implementazione ha incontrato una decisione tecnica non coperta dalle Bible esistenti. Seguono lo stesso metodo (≥3 alternative, motivazione contro la documentazione esistente) e la stessa autorità delle prime 18.
 
 **Filo conduttore delle 18 decisioni originarie**: ovunque esistesse una scelta tra (a) controllo diretto/open-source/portabile e (b) comodità tramite un fornitore proprietario di terze parti, è stata preferita (a) — coerenza diretta con l'indipendenza tecnologica ed economica già rivendicata in tutta la documentazione precedente (Product Constitution, Business Strategy, Technical Architecture Bible). Nessuna decisione introduce un fornitore con visibilità sui contenuti utente; ogni decisione è stata verificata contro almeno una Bible esistente e non ne contraddice alcuna.
 
