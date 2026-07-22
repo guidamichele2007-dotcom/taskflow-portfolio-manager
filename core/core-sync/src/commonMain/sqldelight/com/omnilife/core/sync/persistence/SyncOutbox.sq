@@ -1,0 +1,28 @@
+-- The Local Change Queue's persistent storage (MFC §3: "outbox persistente,
+-- sopravvive al kill" — crash resilience is the whole point of this
+-- table existing instead of an in-memory-only queue).
+--
+-- Named outboxRow (not outboxItem) so SQLDelight's generated row class
+-- (OutboxRow) doesn't collide with the domain type
+-- com.omnilife.core.sync.OutboxItem.
+
+CREATE TABLE outboxRow (
+    id TEXT NOT NULL PRIMARY KEY,
+    payload BLOB NOT NULL,
+    enqueuedAtCounter INTEGER NOT NULL,
+    enqueuedAtDeviceId TEXT NOT NULL,
+    isHot INTEGER NOT NULL
+);
+
+insertOrReplaceItem:
+INSERT OR REPLACE INTO outboxRow(id, payload, enqueuedAtCounter, enqueuedAtDeviceId, isHot)
+VALUES (?, ?, ?, ?, ?);
+
+deleteItem:
+DELETE FROM outboxRow WHERE id = ?;
+
+selectAll:
+SELECT * FROM outboxRow;
+
+countAll:
+SELECT count(*) FROM outboxRow;

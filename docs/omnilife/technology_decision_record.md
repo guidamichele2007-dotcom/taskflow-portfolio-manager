@@ -856,6 +856,70 @@
 
 ---
 
+## TDR-27 · Persistenza della Local Change Queue
+
+> Nota: decisione presa durante lo Sprint 3 (Core Sync Engine), prima di implementare la coda persistente. MFC §3 richiede esplicitamente "outbox persistente, sopravvive al kill" — né la Data Model Bible né la Technical Architecture Bible specificano *come* persisterla (formato file, libreria, schema).
+
+**Decisione**: SQLite via SQLDelight (stesso driver JDBC già verificato per `core-search` e `domain-task`) — una tabella `outboxRow` con `payload BLOB`, `enqueuedAtCounter`/`enqueuedAtDeviceId` (il `LogicalTimestamp` scomposto in colonne), `isHot`. Nome `outboxRow`, non `outboxItem`, perché SQLDelight genera una classe con lo stesso nome della tabella e collidebbe con il tipo di dominio `com.omnilife.core.sync.OutboxItem`.
+
+| Alternativa | Descrizione | Esito |
+|---|---|---|
+| **A — SQLite via SQLDelight (stessa libreria già adottata da TDR-20)** | Una tabella dedicata, transazionale, stesso pattern `DatabaseDriverFactory` già verificato | ✅ Scelta |
+| **B — File JSON/binario scritto a mano su disco** | Nessuna dipendenza aggiuntiva, ma richiede reinventare append-safety e gestione della corruzione parziale in caso di crash a metà scrittura | ❌ Scartata |
+| **C — Restare solo in-memory (`InMemorySyncOutboxStore`), rinviare la persistenza** | Più semplice, ma viola esplicitamente MFC §3 ("sopravvive al kill") — non un'opzione conforme | ❌ Scartata |
+
+**Motivazione**: **B** dovrebbe reimplementare da zero le garanzie che un motore transazionale offre già gratuitamente (scrittura atomica, nessuna corruzione a metà file su crash) — lavoro puro senza alcun vantaggio dato che SQLite è già una dipendenza approvata (TDR-06/TDR-20). **C** è stata scartata perché la persistenza *è* il requisito, non un dettaglio implementativo rinviabile. **A** riusa un pattern già scritto, verificato e compreso in questo stesso sprint (`core-search`), riducendo sia il rischio sia la superficie di codice nuovo.
+
+**Vantaggi**: transazionale per costruzione (nessun rischio di scrittura parziale a metà payload); stesso `DatabaseDriverFactory`/gating piattaforma già stabilito, niente da reinventare; verificato con un test che riapre lo store su un nuovo driver puntato allo stesso file, provando la sopravvivenza al crash, non solo il CRUD in memoria.
+
+**Svantaggi**: una scrittura per `enqueue()` è più lenta di un semplice inserimento in una `Map` in memoria (misurato nel benchmark: vedi sprint3_report.md) — accettabile perché l'outbox non è un percorso ad altissima frequenza (una scrittura per modifica utente, non un ciclo stretto).
+
+**Impatto sul progetto**: `SqlDelightSyncOutboxStore` implementa la stessa interfaccia `SyncOutboxStore` già usata da `SyncScheduler`/`BackgroundSyncCoordinator` — nessun altro componente ha dovuto cambiare per adottarla.
+
+**Rischi**: nessuno strutturale; il file SQLite stesso potrebbe corrompersi per un problema del filesystem sottostante, ma è lo stesso rischio residuo di qualsiasi storage locale, non specifico di questa scelta.
+
+**Costo**: nessuno (SQLDelight è già una dipendenza approvata).
+
+**Facilità di manutenzione**: alta — stesso pattern di due moduli già esistenti.
+
+**Scalabilità**: verificata fino a 10.000 elementi in coda in questo sprint (vedi benchmark); un outbox reale svuota gli elementi appena confermati, quindi non è previsto che cresca indefinitamente.
+
+**Compatibilità con le Bible**: piena — soddisfa letteralmente "outbox persistente, sopravvive al kill" (MFC §3).
+
+---
+
+## TDR-28 · Strategia di implementazione del Network Monitor
+
+> Nota: decisione presa durante lo Sprint 3 (Core Sync Engine), prima di implementare `NetworkMonitor`. Nessuna Bible specifica come ottenere il segnale di connettività — solo che `SyncScheduler`/`BackgroundSyncCoordinator` devono saperlo prima di tentare un ciclo di sync.
+
+**Decisione**: `NetworkMonitor` come interfaccia Kotlin puro (nessun `expect`/`actual` in questo sprint) con una sola implementazione, `ManualNetworkMonitor` — un segnale controllato a mano/testabile. I connettori di piattaforma reali (Android `ConnectivityManager`, iOS `NWPathMonitor`) sono un blocco esplicito per Sprint 4, non scritti nemmeno come stub non verificato.
+
+| Alternativa | Descrizione | Esito |
+|---|---|---|
+| **A — Interfaccia pura + `ManualNetworkMonitor`, connettori reali rinviati** | Ogni altro componente (`SyncScheduler`, `BackgroundSyncCoordinator`) si verifica contro un segnale controllabile in test, senza dipendere da API di piattaforma non ancora scritte | ✅ Scelta |
+| **B — `expect`/`actual` con JVM reale + Android/iOS scritti-ma-non-verificati (stesso pattern di TDR-26/TDR-24's `DatabaseDriverFactory`)** | Coerente con il pattern già usato altrove nel progetto, ma non esiste un vero "segnale di connettività" nativo su JVM desktop paragonabile a quello mobile — l'`actual` JVM sarebbe comunque un finto | ❌ Scartata |
+| **C — Libreria di terze parti per il rilevamento di connettività cross-platform** | Aggiungerebbe una dipendenza esterna per una singola callback booleana che ogni piattaforma espone già nativamente | ❌ Scartata |
+
+**Motivazione**: a differenza di `DatabaseDriverFactory` (TDR-20) o `NotificationScheduler` (TDR-26), dove il target JVM ha un'implementazione realmente utile (SQLite in-memory, `ScheduledExecutorService`), un "actual" JVM per la connettività di rete non avrebbe nulla di più reale da fare di quanto `ManualNetworkMonitor` già offre — scrivere un `expect`/`actual` qui aggiungerebbe complessità (il flag `-Xexpect-actual-classes`, tre file invece di uno) senza aumentare la copertura verificabile in questo sandbox. **C** è sproporzionata per una singola callback booleana che ogni piattaforma già espone nativamente.
+
+**Vantaggi**: `SyncScheduler`/`BackgroundSyncCoordinator` sono già interamente testati contro transizioni di connettività arbitrarie (online→offline→online) tramite `ManualNetworkMonitor.setOnline()`, senza attendere un vero connettore di piattaforma.
+
+**Svantaggi**: nessuna implementazione reale della connettività esiste ancora in nessun target — un'app reale dovrà aggiungere un `actual` Android/iOS prima di poter osservare la rete davvero (blocco dichiarato, non silenzioso).
+
+**Impatto sul progetto**: `NetworkMonitor` è un'interfaccia a una sola implementazione oggi; qualunque futuro connettore di piattaforma la implementerà senza toccare `SyncScheduler`/`BackgroundSyncCoordinator`.
+
+**Rischi**: nessuno strutturale; il rischio è di scope, non tecnico (il collegamento reale resta un blocco per Sprint 4, esplicitamente registrato).
+
+**Costo**: nessuno.
+
+**Facilità di manutenzione**: alta — un'interfaccia a un metodo, nessuna logica di piattaforma da mantenere ancora.
+
+**Scalabilità**: non applicabile (una singola callback, non un percorso ad alto volume).
+
+**Compatibilità con le Bible**: piena — nessuna Bible richiede una connessione reale a questo sprint; il requisito "sync solo se connesso" (MFC §3) è soddisfatto dall'interfaccia, l'implementazione reale è un dettaglio di piattaforma rinviato.
+
+---
+
 ## Tabella Finale — Decisioni Tecnologiche Approvate
 
 | ID | Area | Decisione approvata |
@@ -885,9 +949,11 @@
 | TDR-23 | Primitive crittografiche concrete (core-security) | AES-256-GCM + PBKDF2WithHmacSHA256 (JCE nativo, 600k iterazioni); cifratura DB a livello di campo applicativa, SQLCipher a livello di pagina resta blocco futuro |
 | TDR-24 | Struttura del clock logico e dei tipi CRDT (core-sync) | `LogicalTimestamp(counter, deviceId)`; `LwwRegister`/`ORSet`/`SnapshotHistory` scritti a mano, coerenti con TDR-05 |
 | TDR-25 | Tecnologia e ranking di ricerca (core-search) | SQLite FTS5 via SQLDelight; ranking a comparatore esplicito a 3 assi, mai bm25 nativo |
-| TDR-26 | Meccanismo di scheduling notifiche locali (core-notifications) | `expect`/`actual` per piattaforma; JVM reale (ScheduledExecutorService), Android/iOS scritti non verificati |
+| TDR-26 | Meccanismo di scheduling notifiche locali (core-notifications) | `expect`/`actual` per piattaforma; JVM reale (ScheduledExecutorService), Android/iOS scritti non verificati — **componente poi descoped dal perimetro raffinato dello Sprint 3, voce mantenuta per lo storico della decisione** |
+| TDR-27 | Persistenza della Local Change Queue (core-sync) | SQLite via SQLDelight, tabella `outboxRow`; sostituisce l'outbox solo-in-memoria per soddisfare "sopravvive al kill" (MFC §3) |
+| TDR-28 | Strategia di implementazione del Network Monitor (core-sync) | Interfaccia pura + `ManualNetworkMonitor`; connettori di piattaforma reali (Android/iOS) rinviati a Sprint 4 |
 
-**Nota sulle voci TDR-19…26**: a differenza di TDR-01…18 (decise tutte insieme, prima di ogni riga di codice), queste voci sono state aggiunte durante gli sprint di sviluppo reale (TDR-19…21 nello Sprint 1, TDR-22 nello Sprint 2, TDR-23…26 nello Sprint 3) quando l'implementazione ha incontrato una decisione tecnica non coperta dalle Bible esistenti. Seguono lo stesso metodo (≥3 alternative, motivazione contro la documentazione esistente) e la stessa autorità delle prime 18.
+**Nota sulle voci TDR-19…28**: a differenza di TDR-01…18 (decise tutte insieme, prima di ogni riga di codice), queste voci sono state aggiunte durante gli sprint di sviluppo reale (TDR-19…21 nello Sprint 1, TDR-22 nello Sprint 2, TDR-23…28 nello Sprint 3) quando l'implementazione ha incontrato una decisione tecnica non coperta dalle Bible esistenti. Seguono lo stesso metodo (≥3 alternative, motivazione contro la documentazione esistente) e la stessa autorità delle prime 18.
 
 **Filo conduttore delle 18 decisioni originarie**: ovunque esistesse una scelta tra (a) controllo diretto/open-source/portabile e (b) comodità tramite un fornitore proprietario di terze parti, è stata preferita (a) — coerenza diretta con l'indipendenza tecnologica ed economica già rivendicata in tutta la documentazione precedente (Product Constitution, Business Strategy, Technical Architecture Bible). Nessuna decisione introduce un fornitore con visibilità sui contenuti utente; ogni decisione è stata verificata contro almeno una Bible esistente e non ne contraddice alcuna.
 
