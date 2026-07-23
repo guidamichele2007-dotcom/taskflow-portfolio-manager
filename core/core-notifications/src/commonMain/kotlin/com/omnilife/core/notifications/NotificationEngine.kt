@@ -7,7 +7,12 @@ import com.omnilife.core.eventbus.InMemoryEventBus
  * Facade composing this module's components with in-memory/JVM defaults — a single point a
  * future app entry point wires up, mirroring `core-sync`'s `SyncEngine`. Each component also
  * works standalone; nothing here depends on any `domain-*` module.
+ *
+ * A composition-root facade wiring every component by design — splitting the constructor into
+ * grouped parameter objects would only hide the same 11 dependencies behind extra indirection,
+ * not reduce them, hence the suppression below.
  */
+@Suppress("LongParameterList")
 public class NotificationEngine(
     public val eventBus: EventBus = InMemoryEventBus(),
     public val categoryRegistry: NotificationCategoryRegistry = InMemoryNotificationCategoryRegistry(),

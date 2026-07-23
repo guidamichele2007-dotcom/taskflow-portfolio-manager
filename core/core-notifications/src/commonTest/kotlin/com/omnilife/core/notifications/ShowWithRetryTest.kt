@@ -19,7 +19,7 @@ private class FlakyLocalNotificationService(private val failuresBeforeSuccess: I
     ) {
         attempts++
         if (attempts <= failuresBeforeSuccess) {
-            throw IllegalStateException("simulated platform scheduling failure")
+            error("simulated platform scheduling failure")
         }
         delivered = true
         onDelivered(request)
