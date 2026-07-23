@@ -29,6 +29,7 @@ Questa cartella contiene la base progettuale completa che guida tutte le fasi su
 | — | [Sprint 1 Code Review](sprint1_review.md) | Review tecnica completa del codice Sprint 1: architettura, duplicazioni, complessità, performance, sicurezza, test, debito tecnico — bug oggettivi corretti, problemi progettuali proposti (non implementati), punteggi e priorità per Sprint 2 |
 | — | [Sprint 2 Report — Core UI Kit](sprint2_report.md) | Il Design System trasformato in codice: 22 componenti Compose Multiplatform (`core-designsystem`, TDR-22), token completi (`core-designtokens`), catalogo e gallery — copertura test, componenti mancanti, miglioramenti proposti al Design System |
 | — | [Sprint 3 Report — Core Sync Engine + Core Notifications](sprint3_report.md) | Il motore di sincronizzazione offline-first condiviso (`core-sync`, TDR-24/27/28) e, dopo lo Scope Change D-12, il broker centrale delle notifiche con tutti i 15 sottocomponenti richiesti (`core-notifications`, TDR-26/29…33) — più `core-security` (TDR-23) e `core-search` (TDR-25) completati prima del raffinamento di perimetro |
+| — | [Sprint 4 Report — Home Dashboard](sprint4_report.md) | La Home "Oggi" definitiva (`feature-core`): Dashboard, Widget System, Global Search Entry/Sync Status/Notification Center reali (via Core Search/Sync/Notifications), Today Overview/Agenda/Recent Activity/Goal/Habit/Finance/Calendar Summary come placeholder funzionali — nessun modulo `domain-*` in questo sprint |
 
 ---
 

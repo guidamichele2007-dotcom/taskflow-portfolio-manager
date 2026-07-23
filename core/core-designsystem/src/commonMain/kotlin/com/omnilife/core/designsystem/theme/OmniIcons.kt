@@ -21,9 +21,10 @@ import kotlin.math.sin
 /**
  * A single monochromatic, single-stroke icon set (DS-05/DS-09) — hand-drawn
  * with [DrawScope] primitives rather than imported as a third-party icon
- * font/library (TDR-22): the ~11 glyphs this sprint's components need,
- * every one drawn with the same stroke width/cap/join, guaranteeing "one
- * set, one stroke style" by construction rather than by curation.
+ * font/library (TDR-22): every glyph drawn with the same stroke
+ * width/cap/join, guaranteeing "one set, one stroke style" by construction
+ * rather than by curation. NOTIFICATIONS/SYNC added in Sprint 4 for the
+ * Home Dashboard's notification-center entry and sync-status indicator.
  */
 public enum class OmniIconType {
     CHECK,
@@ -37,6 +38,8 @@ public enum class OmniIconType {
     WARNING,
     INFO,
     ARROW_BACK,
+    NOTIFICATIONS,
+    SYNC,
 }
 
 /**
@@ -46,6 +49,8 @@ public enum class OmniIconType {
  * the action, which hides the icon from screen readers as purely
  * decorative.
  */
+@Suppress("CyclomaticComplexMethod") // One branch per OmniIconType, each a single trivial draw call —
+// splitting this into a lookup table would launder the metric, not simplify the code.
 @Composable
 public fun OmniIcon(
     type: OmniIconType,
@@ -76,6 +81,8 @@ public fun OmniIcon(
             OmniIconType.WARNING -> drawExclamationGlyph(stroke, tint, circular = false)
             OmniIconType.INFO -> drawInfo(stroke, tint)
             OmniIconType.ARROW_BACK -> drawArrowBack(stroke, tint)
+            OmniIconType.NOTIFICATIONS -> drawNotifications(stroke, tint)
+            OmniIconType.SYNC -> drawSync(stroke, tint)
         }
     }
 }
@@ -205,9 +212,56 @@ private fun DrawScope.drawArrowBack(
     drawPath(arrowHead, tint, style = stroke)
 }
 
-// Kept for future radial glyphs (none of the current 11 icons need trigonometry
-// beyond straight lines/arcs, but the helper is shared to avoid duplicating it
-// once a circular layout is needed, e.g. a future radial shortcut menu icon).
+private fun DrawScope.drawNotifications(
+    stroke: Stroke,
+    tint: Color,
+) {
+    val w = size.width
+    val h = size.height
+    val bellPath =
+        androidx.compose.ui.graphics.Path().apply {
+            moveTo(w * 0.5f, h * 0.16f)
+            arcTo(
+                rect = androidx.compose.ui.geometry.Rect(w * 0.24f, h * 0.2f, w * 0.76f, h * 0.72f),
+                startAngleDegrees = 180f,
+                sweepAngleDegrees = 180f,
+                forceMoveTo = false,
+            )
+            lineTo(w * 0.8f, h * 0.72f)
+            lineTo(w * 0.2f, h * 0.72f)
+            close()
+        }
+    drawPath(bellPath, tint, style = stroke)
+    drawLine(tint, Offset(w * 0.4f, h * 0.8f), Offset(w * 0.6f, h * 0.8f), stroke.width, stroke.cap)
+}
+
+private fun DrawScope.drawSync(
+    stroke: Stroke,
+    tint: Color,
+) {
+    val center = Offset(size.width * 0.5f, size.height * 0.5f)
+    val radius = size.minDimension * 0.3f
+    drawArc(
+        color = tint,
+        startAngle = -30f,
+        sweepAngle = 260f,
+        useCenter = false,
+        topLeft = Offset(center.x - radius, center.y - radius),
+        size = androidx.compose.ui.geometry.Size(radius * 2, radius * 2),
+        style = stroke,
+    )
+    val arrowTip = pointOnCircle(center, radius, angleRadians = (-30f) * (kotlin.math.PI.toFloat() / 180f))
+    val arrowHead =
+        androidx.compose.ui.graphics.Path().apply {
+            moveTo(arrowTip.x - radius * 0.35f, arrowTip.y - radius * 0.35f)
+            lineTo(arrowTip.x, arrowTip.y)
+            lineTo(arrowTip.x - radius * 0.5f, arrowTip.y + radius * 0.15f)
+        }
+    drawPath(arrowHead, tint, style = stroke)
+}
+
+// Used by drawSync's arrowhead placement (Sprint 4) — shared here rather than duplicated
+// wherever a circular layout needs a point on an arc.
 internal fun pointOnCircle(
     center: Offset,
     radius: Float,

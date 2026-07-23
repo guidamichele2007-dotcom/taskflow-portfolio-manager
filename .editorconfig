@@ -16,8 +16,10 @@ ktlint_standard_filename = disabled
 # @Composable functions are PascalCase by the Jetpack Compose style guide
 # itself (they emit UI, conceptually closer to a type than a verb) — the
 # stock ktlint ruleset has no @Composable exception for function-naming, so
-# every Omni* component would otherwise be flagged. TDR-22 / core-designsystem.
-[core/core-designsystem/**.kt]
+# every Omni*/Home* component would otherwise be flagged. TDR-22 /
+# core-designsystem; feature-core added Sprint 4 (first feature module with
+# real Compose screens).
+[{core/core-designsystem,feature/feature-core}/**.kt]
 ktlint_standard_function-naming = disabled
 
 [*.go]
