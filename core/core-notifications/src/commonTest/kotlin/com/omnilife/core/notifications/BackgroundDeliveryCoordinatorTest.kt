@@ -25,8 +25,10 @@ class BackgroundDeliveryCoordinatorTest {
     private val zone = TimeZone.UTC
     private val category = NotificationCategory("task.reminder", "task")
 
-    private fun request(id: String, scheduledFor: Instant) =
-        NotificationRequest(
+    private fun request(
+        id: String,
+        scheduledFor: Instant,
+    ) = NotificationRequest(
             id = id,
             category = category,
             priority = NotificationPriority.PROMEMORIA_UTENTE,
