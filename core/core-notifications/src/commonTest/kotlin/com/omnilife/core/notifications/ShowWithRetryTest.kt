@@ -38,7 +38,7 @@ private class AlwaysFailingLocalNotificationService : LocalNotificationService {
         onDelivered: (NotificationRequest) -> Unit,
     ) {
         attempts++
-        throw IllegalStateException("simulated platform scheduling failure")
+        error("simulated platform scheduling failure")
     }
 
     override fun cancel(requestId: String) = Unit
