@@ -60,14 +60,16 @@ class NotificationBudgetTest {
 
     @Test
     fun `the day boundary is the local day, not UTC`() {
-        // 23:30 in UTC-5 is 04:30 the next UTC day — the budget must use the local date.
-        val zoneMinus5 = TimeZone.of("America/New_York")
-        val lateNightLocal = Instant.parse("2026-01-02T04:30:00Z") // 2026-01-01 23:30 in UTC-5
+        val zoneMinus5 = TimeZone.of("America/New_York") // UTC-5 in January, no DST
         val budget = NotificationBudget(initialDailyLimit = 1)
 
-        budget.consume(NotificationPriority.UTILE, lateNightLocal, zoneMinus5)
-        // Still 2026-01-01 locally three hours later.
-        val stillSameLocalDay = Instant.parse("2026-01-02T06:00:00Z")
-        assertFalse(budget.hasRoom(NotificationPriority.UTILE, stillSameLocalDay, zoneMinus5))
+        // 2026-01-01T23:00:00Z is UTC calendar day Jan 1; local (UTC-5) is 2026-01-01T18:00,
+        // local day Jan 1.
+        budget.consume(NotificationPriority.UTILE, Instant.parse("2026-01-01T23:00:00Z"), zoneMinus5)
+
+        // 2026-01-02T02:00:00Z is UTC calendar day Jan 2 — a *different* UTC day — but local
+        // (UTC-5) is 2026-01-01T21:00, still local day Jan 1. A UTC-day-based budget would
+        // incorrectly reset here; a local-day-based one must not.
+        assertFalse(budget.hasRoom(NotificationPriority.UTILE, Instant.parse("2026-01-02T02:00:00Z"), zoneMinus5))
     }
 }

@@ -52,10 +52,12 @@ class BackgroundDeliveryCoordinatorTest {
                 eventBus = InMemoryEventBus(),
             )
         val coordinator = BackgroundDeliveryCoordinator(broker)
-        val nightTime = Instant.parse("2026-01-01T23:00:00Z")
+        // 05:00 is still within the default 22-8 quiet window; waking at 08:00 (window end,
+        // exclusive) is only 3h later — within SmartRescheduler's 4h relevance window (TDR-29).
+        val nightTime = Instant.parse("2026-01-02T05:00:00Z")
         broker.request(request("r1", nightTime), nightTime, zone)
 
-        coordinator.runOnce(Instant.parse("2026-01-02T00:30:00Z"), zone)
+        coordinator.runOnce(Instant.parse("2026-01-02T08:00:00Z"), zone)
 
         assertEquals(listOf("r1"), service.shown.map { it.id })
     }

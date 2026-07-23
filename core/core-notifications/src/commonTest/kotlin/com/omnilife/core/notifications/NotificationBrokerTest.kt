@@ -154,10 +154,12 @@ class NotificationBrokerTest {
     fun `NTF-AC-03 - a deferred request still relevant at wake time is shown`() {
         val service = FakeLocalNotificationService()
         val broker = broker(localService = service)
-        val scheduledFor = Instant.parse("2026-01-01T23:00:00Z")
+        // 05:00 is still within the default 22-8 quiet window; waking at 08:00 (window end,
+        // exclusive) is only 3h later — within SmartRescheduler's 4h relevance window (TDR-29).
+        val scheduledFor = Instant.parse("2026-01-02T05:00:00Z")
 
         broker.request(request("r1", scheduledFor = scheduledFor), scheduledFor, zone)
-        broker.processDeferred(Instant.parse("2026-01-02T00:30:00Z"), zone)
+        broker.processDeferred(Instant.parse("2026-01-02T08:00:00Z"), zone)
 
         assertEquals(listOf("r1"), service.shown.map { it.id })
     }
