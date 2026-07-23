@@ -920,6 +920,169 @@
 
 ---
 
+## TDR-29 · Finestra di rilevanza per lo Smart Reschedule (core-notifications)
+
+> Nota: decisione presa durante lo Sprint 3, dopo lo Scope Change che ha reintrodotto `core-notifications` (Decision Log D-12), prima di implementare `SmartRescheduler`. NTF-004/NTF-AC-03 dichiarano la regola ("un promemoria delle 23 per le 23 è morto alle 8") ma non una durata generale per "ancora rilevante".
+
+**Decisione**: finestra di rilevanza fissa di **4 ore** dopo l'orario originariamente programmato — oltre le 4h da `scheduledFor`, un promemoria soppresso dal silenzio non viene più mostrato al risveglio (diventa `SCADUTA_DI_SIGNIFICATO`, visibile solo in `NotificationHistoryStore`).
+
+| Alternativa | Descrizione | Esito |
+|---|---|---|
+| **A — Finestra fissa (4h)** | Una costante semplice, uguale per ogni notifica | ✅ Scelta |
+| **B — Finestra configurabile per categoria** | Un promemoria task potrebbe avere una finestra diversa da un digest informativo | ❌ Scartata (per questo sprint) |
+| **C — Nessuna scadenza: mostra sempre al risveglio** | Più semplice, ma contraddice letteralmente NTF-AC-03 ("è morto alle 8") | ❌ Scartata |
+
+**Motivazione**: **C** è esplicitamente vietata dall'esempio stesso della Bible. **B** è più corretta in linea di principio (un promemoria urgente e un digest informativo non dovrebbero condividere la stessa soglia di "ancora attuale"), ma introduce una configurazione per-categoria che nessuna Bible richiede in questo sprint — rinviata come miglioramento futuro. **A** soddisfa la regola dichiarata con la minima complessità: 4 ore copre comodamente l'intera finestra di silenzio di default (22-8, 10 ore) senza essere così breve da far scadere praticamente tutto ciò che viene soppresso a inizio notte.
+
+**Vantaggi**: comportamento prevedibile e testabile con un solo numero; nessuna configurazione da esporre nella UI (fuori perimetro di questo sprint comunque).
+
+**Svantaggi**: non distingue tra priorità/categorie — un domani si potrebbe voler rendere alcune notifiche "sempre rilevanti" (nessuna Bible lo richiede oggi).
+
+**Impatto sul progetto**: `SmartRescheduler.relevanceWindow` è una costante pubblica, sostituibile con un parametro per-categoria in un futuro sprint senza cambiare la firma di `decide()`.
+
+**Rischi**: nessuno strutturale.
+
+**Costo**: nessuno.
+
+**Facilità di manutenzione**: alta.
+
+**Scalabilità**: non applicabile.
+
+**Compatibilità con le Bible**: piena — verificata letteralmente da `SmartReschedulerTest` contro l'esempio di NTF-AC-03.
+
+---
+
+## TDR-30 · Semantica del collasso "burst" e orario di consegna del digest (core-notifications)
+
+> Nota: decisione presa durante lo Sprint 3 (Decision Log D-12), prima di implementare `NotificationBroker`. NTF §2 scheda estesa dichiara l'esempio ("50 richieste in un'ora → 1 digest 'mentre eri via'") ma non la semantica esatta di quali richieste collassano, né NTF-003 fissa un orario di consegna del digest.
+
+**Decisione**: (1) il conteggio delle richieste nell'ultima ora è tracciato con una finestra scorrevole; solo le richieste che arrivano **dopo** che la soglia (50) è stata superata vengono instradate al digest — le richieste già mostrate prima di superare la soglia restano mostrate individualmente (non un collasso retroattivo dell'intero burst). (2) Il digest si consegna di default alle **18:00 locali**, al massimo una volta al giorno.
+
+| Alternativa (collasso burst) | Descrizione | Esito |
+|---|---|---|
+| **A — Solo le richieste eccedenti collassano (in avanti)** | Semplice da implementare in streaming, nessuno stato da riscrivere retroattivamente | ✅ Scelta |
+| **B — L'intero burst collassa retroattivamente in un digest** | Più fedele alla frase "collassa in 1 digest", ma richiederebbe annullare notifiche già consegnate all'utente | ❌ Scartata |
+
+| Alternativa (orario digest) | Descrizione | Esito |
+|---|---|---|
+| **A — Orario fisso configurabile, default 18:00** | Un solo momento della giornata, prevedibile | ✅ Scelta |
+| **B — Subito dopo l'ultima notifica accumulata** | Nessun "momento scelto" — contraddice NTF-003 ("a orario scelto") | ❌ Scartata |
+
+**Motivazione**: **B** (retroattivo) per il burst richiederebbe "ritirare" notifiche di sistema già mostrate — un'operazione che nessuna piattaforma supporta in modo pulito e che la Bible non richiede esplicitamente (l'esempio descrive l'esperienza dell'utente al rientro, non un requisito tecnico di cancellazione). **A** (in avanti) produce lo stesso risultato percepito — un utente che rientra da offline vede poche notifiche singole e un digest per il resto — con un'implementazione a finestra scorrevole, senza stato aggiuntivo da riconciliare. Per l'orario del digest, NTF-003 dice esplicitamente "a orario scelto": **B** lo tradirebbe consegnando immediatamente, che è esattamente il comportamento che il digest esiste per evitare.
+
+**Vantaggi**: implementazione a finestra scorrevole O(1) ammortizzato per richiesta (non un secondo passaggio O(n) — vedi il bug O(n²) già trovato e corretto in `core-sync`'s `ORSet`, stesso principio applicato qui preventivamente); orario di consegna del digest deterministico e testabile.
+
+**Svantaggi**: la soglia di burst (50) e l'orario di consegna (18:00) sono entrambi valori singoli globali, non per-categoria/per-utente — nessuna Bible lo richiede in questo sprint.
+
+**Impatto sul progetto**: `NotificationBroker`'s `burstThreshold`/`digestDeliveryHour` sono parametri del costruttore con default, sostituibili da una futura configurazione utente senza cambiare l'API pubblica.
+
+**Rischi**: nessuno strutturale.
+
+**Costo**: nessuno.
+
+**Facilità di manutenzione**: alta.
+
+**Scalabilità**: la finestra scorrevole resta O(1) ammortizzato indipendentemente dal volume di richieste.
+
+**Compatibilità con le Bible**: piena per NTF-003; l'interpretazione "in avanti" del burst è una scelta implementativa dichiarata, non letterale al 100%, ma preserva l'esperienza utente descritta.
+
+---
+
+## TDR-31 · Retry Logic indipendente da core-sync (core-notifications)
+
+> Nota: decisione presa durante lo Sprint 3 (Decision Log D-12), prima di implementare `NotificationRetryEngine`. Il task esplicitamente richiede che `core-notifications` resti "completamente indipendente e riutilizzabile" — `core-sync` possiede già un proprio `RetryEngine` (TDR-24), ma con costanti pensate per un ciclo di sincronizzazione (backoff fino a 1h, soglia di fallimento persistente a 72h), non per una singola chiamata di scheduling locale.
+
+**Decisione**: `NotificationRetryEngine` proprio, non una dipendenza da `core-sync`. Backoff esponenziale 2s→5 minuti, massimo 5 tentativi (nessuna soglia "fallimento persistente" a 72h: qui un fallimento o si risolve in pochi minuti o il momento della notifica è comunque passato).
+
+| Alternativa | Descrizione | Esito |
+|---|---|---|
+| **A — `NotificationRetryEngine` proprio, module-local** | Nessuna dipendenza da `core-sync`; costanti calibrate per una chiamata di scheduling, non un ciclo di rete | ✅ Scelta |
+| **B — Dipendere da `core-sync`'s `RetryEngine`** | Riuso di codice già scritto e testato | ❌ Scartata |
+
+**Motivazione**: **B** violerebbe esplicitamente il requisito di indipendenza di questo modulo, e le costanti di `core-sync` sono semanticamente sbagliate qui: un fallimento di sincronizzazione può ragionevolmente attendere fino a un'ora prima di ritentare (il dato resta valido), mentre un fallimento nella chiamata di scheduling di una notifica deve ritentare in pochi secondi o il momento previsto della notifica passa comunque. **A** è una duplicazione minima (stesso pattern di backoff esponenziale, poche righe) ma con parametri e assenza di soglia-72h corretti per il dominio.
+
+**Vantaggi**: `core-notifications` resta importabile da un ipotetico progetto che non usa affatto `core-sync`; i parametri sono quelli giusti per il caso d'uso (un fallimento di scheduling è un problema minuti, non ore).
+
+**Svantaggi**: due implementazioni concettualmente simili (backoff esponenziale) esistono nel codebase, in due moduli — accettato deliberatamente per il vincolo di indipendenza dichiarato.
+
+**Impatto sul progetto**: nessuna dipendenza Gradle tra `core-notifications` e `core-sync`.
+
+**Rischi**: nessuno strutturale.
+
+**Costo**: nessuno.
+
+**Facilità di manutenzione**: media — un futuro cambiamento alla strategia di backoff andrebbe applicato in entrambi i moduli separatamente, se davvero condiviso; accettato come costo dell'indipendenza.
+
+**Scalabilità**: non applicabile.
+
+**Compatibilità con le Bible**: piena — nessuna Bible specifica la strategia di retry per la consegna locale.
+
+---
+
+## TDR-32 · Formato dell'URI dei deep link (core-notifications)
+
+> Nota: decisione presa durante lo Sprint 3 (Decision Log D-12), prima di implementare `DeepLinkResolver`. Nessuna Bible/TDR specifica un formato di deep link per la piattaforma.
+
+**Decisione**: `omnilife://<entityType>/<entityId>` — uno schema custom minimale, una sola entità referenziata per link.
+
+| Alternativa | Descrizione | Esito |
+|---|---|---|
+| **A — Schema custom minimale `omnilife://tipo/id`** | Nessuna libreria, facilmente parsabile, sufficiente per puntare a un'unica entità | ✅ Scelta |
+| **B — Universal Links / App Links (HTTPS reali)** | Richiede un dominio verificato e file `apple-app-site-association`/`assetlinks.json` pubblicati — infrastruttura web fuori perimetro di questo sprint | ❌ Scartata (per ora) |
+| **C — Formato strutturato (query string con più parametri)** | Più flessibile per link con parametri aggiuntivi (es. azione preselezionata) | ❌ Scartata (non richiesto oggi) |
+
+**Motivazione**: **B** è l'approccio production-grade più robusto (funziona anche senza l'app installata), ma richiede infrastruttura web (dominio, file di verifica pubblicati) che questo sprint esplicitamente non copre ("Non implementare: UI, schermate" — un dominio verificato è comunque un asset "app-shell", non di questo modulo core). **C** risolverebbe un problema (parametri aggiuntivi) che nessun requisito attuale pone — ogni notifica in questo sprint punta a un'unica entità, mai un'azione parametrica. **A** è il minimo sufficiente, ed è facilmente estendibile a **C** in futuro senza rompere il formato base (aggiungere una query string dopo l'id è additivo).
+
+**Vantaggi**: zero dipendenze, banale da testare (round-trip build/parse verificato), leggibile nei log.
+
+**Svantaggi**: non funziona come vero Universal Link (se l'app non è installata, non c'è fallback web) — accettabile perché questo sprint non tocca alcuna superficie web.
+
+**Impatto sul progetto**: `DeepLinkResolver` è isolato — passare a Universal Links in futuro richiede solo un nuovo resolver con la stessa interfaccia concettuale (build/parse verso `EntityReference`), nessun altro componente ne dipende direttamente dal formato stringa.
+
+**Rischi**: nessuno strutturale.
+
+**Costo**: nessuno.
+
+**Facilità di manutenzione**: alta.
+
+**Scalabilità**: non applicabile.
+
+**Compatibilità con le Bible**: piena — nessuna Bible impone un formato specifico.
+
+---
+
+## TDR-33 · Mappatura categoria/priorità → canale di notifica (core-notifications)
+
+> Nota: decisione presa durante lo Sprint 3 (Decision Log D-12), prima di implementare la mappatura in `NotificationBroker`. Android richiede un canale per ogni notifica; nessuna Bible specifica come mappare le categorie NTF-007 ai canali/all'importanza.
+
+**Decisione**: un canale per categoria (`channelId = category.id`), importanza derivata dalla priorità NTF-002 (`PROMEMORIA_UTENTE` → alta, `UTILE` → default, `INFORMATIVA` → bassa).
+
+| Alternativa | Descrizione | Esito |
+|---|---|---|
+| **A — Un canale per categoria, importanza dalla priorità** | Coerente con la granularità NTF-007 (l'utente disattiva per categoria, e su Android può anche silenziare per canale dalle impostazioni di sistema — le due granularità coincidono) | ✅ Scelta |
+| **B — Un solo canale globale per l'intera app** | Più semplice, ma perde la granularità che l'utente può controllare da Android stesso, e mischia priorità diverse in un solo livello di importanza | ❌ Scartata |
+| **C — Canale per priorità (3 canali fissi), non per categoria** | Meno canali da gestire, ma un utente non potrebbe silenziare "promemoria task" senza silenziare ogni altro promemoria alta priorità | ❌ Scartata |
+
+**Motivazione**: **B** contraddice direttamente NTF-007/NTF-R-03 ("ogni notifica è disattivabile alla granularità a cui è generata") — un solo canale toglierebbe all'utente Android il controllo di sistema equivalente. **C** risolve solo parzialmente lo stesso problema. **A** allinea la granularità di controllo di Android (canale) alla stessa granularità già decisa per l'app (categoria), così le due superfici di controllo (in-app via `NotificationCategoryRegistry`, di sistema via le impostazioni Android del canale) restano coerenti tra loro anziché in conflitto.
+
+**Vantaggi**: nessuna doppia fonte di verità sulla granularità di disattivazione; il numero di canali cresce con il numero di categorie reali (dell'ordine di poche decine, non un problema).
+
+**Svantaggi**: più canali da creare rispetto a un singolo canale globale (costo trascurabile, `ensureChannel` è idempotente).
+
+**Impatto sul progetto**: `NotificationBroker.channelSpecFor` è l'unico punto che decide questa mappatura — cambiarla in futuro (es. importanza configurabile per categoria) tocca una sola funzione.
+
+**Rischi**: nessuno strutturale.
+
+**Costo**: nessuno.
+
+**Facilità di manutenzione**: alta.
+
+**Scalabilità**: adeguata al numero di categorie reali dichiarate dalle Bible (decine, non migliaia).
+
+**Compatibilità con le Bible**: piena — rispetta NTF-007/NTF-R-03 letteralmente.
+
+---
+
 ## Tabella Finale — Decisioni Tecnologiche Approvate
 
 | ID | Area | Decisione approvata |
@@ -949,11 +1112,16 @@
 | TDR-23 | Primitive crittografiche concrete (core-security) | AES-256-GCM + PBKDF2WithHmacSHA256 (JCE nativo, 600k iterazioni); cifratura DB a livello di campo applicativa, SQLCipher a livello di pagina resta blocco futuro |
 | TDR-24 | Struttura del clock logico e dei tipi CRDT (core-sync) | `LogicalTimestamp(counter, deviceId)`; `LwwRegister`/`ORSet`/`SnapshotHistory` scritti a mano, coerenti con TDR-05 |
 | TDR-25 | Tecnologia e ranking di ricerca (core-search) | SQLite FTS5 via SQLDelight; ranking a comparatore esplicito a 3 assi, mai bm25 nativo |
-| TDR-26 | Meccanismo di scheduling notifiche locali (core-notifications) | `expect`/`actual` per piattaforma; JVM reale (ScheduledExecutorService), Android/iOS scritti non verificati — **componente poi descoped dal perimetro raffinato dello Sprint 3, voce mantenuta per lo storico della decisione** |
+| TDR-26 | Meccanismo di scheduling notifiche locali (core-notifications) | `expect`/`actual` per piattaforma; JVM reale (ScheduledExecutorService), Android/iOS scritti non verificati — **inizialmente descoped dal raffinamento a metà Sprint 3, poi effettivamente implementato dopo lo Scope Change D-12** |
 | TDR-27 | Persistenza della Local Change Queue (core-sync) | SQLite via SQLDelight, tabella `outboxRow`; sostituisce l'outbox solo-in-memoria per soddisfare "sopravvive al kill" (MFC §3) |
 | TDR-28 | Strategia di implementazione del Network Monitor (core-sync) | Interfaccia pura + `ManualNetworkMonitor`; connettori di piattaforma reali (Android/iOS) rinviati a Sprint 4 |
+| TDR-29 | Finestra di rilevanza per lo Smart Reschedule (core-notifications) | 4 ore dopo l'orario originale, oltre le quali un promemoria soppresso dal silenzio non si mostra più al risveglio (NTF-AC-03) |
+| TDR-30 | Semantica del burst e orario di consegna del digest (core-notifications) | Collasso "in avanti" (solo le richieste oltre soglia), finestra scorrevole O(1); digest consegnato di default alle 18:00 locali, max 1/giorno |
+| TDR-31 | Retry Logic indipendente da core-sync (core-notifications) | `NotificationRetryEngine` proprio (2s→5min, max 5 tentativi) — nessuna dipendenza da `core-sync`'s `RetryEngine`, per restare un modulo autonomo |
+| TDR-32 | Formato dell'URI dei deep link (core-notifications) | Schema custom `omnilife://<tipo>/<id>`; Universal Links/App Links rinviati (richiedono infrastruttura web fuori perimetro) |
+| TDR-33 | Mappatura categoria/priorità → canale di notifica (core-notifications) | Un canale Android per categoria, importanza derivata dalla priorità NTF-002 — allinea la granularità di sistema a quella NTF-007 |
 
-**Nota sulle voci TDR-19…28**: a differenza di TDR-01…18 (decise tutte insieme, prima di ogni riga di codice), queste voci sono state aggiunte durante gli sprint di sviluppo reale (TDR-19…21 nello Sprint 1, TDR-22 nello Sprint 2, TDR-23…28 nello Sprint 3) quando l'implementazione ha incontrato una decisione tecnica non coperta dalle Bible esistenti. Seguono lo stesso metodo (≥3 alternative, motivazione contro la documentazione esistente) e la stessa autorità delle prime 18.
+**Nota sulle voci TDR-19…33**: a differenza di TDR-01…18 (decise tutte insieme, prima di ogni riga di codice), queste voci sono state aggiunte durante gli sprint di sviluppo reale (TDR-19…21 nello Sprint 1, TDR-22 nello Sprint 2, TDR-23…33 nello Sprint 3 — incluso lo Scope Change D-12 che ha reintrodotto le notifiche a metà sprint) quando l'implementazione ha incontrato una decisione tecnica non coperta dalle Bible esistenti. Seguono lo stesso metodo (≥3 alternative, motivazione contro la documentazione esistente) e la stessa autorità delle prime 18.
 
 **Filo conduttore delle 18 decisioni originarie**: ovunque esistesse una scelta tra (a) controllo diretto/open-source/portabile e (b) comodità tramite un fornitore proprietario di terze parti, è stata preferita (a) — coerenza diretta con l'indipendenza tecnologica ed economica già rivendicata in tutta la documentazione precedente (Product Constitution, Business Strategy, Technical Architecture Bible). Nessuna decisione introduce un fornitore con visibilità sui contenuti utente; ogni decisione è stata verificata contro almeno una Bible esistente e non ne contraddice alcuna.
 

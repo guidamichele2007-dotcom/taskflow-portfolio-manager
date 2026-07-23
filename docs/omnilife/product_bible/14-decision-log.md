@@ -105,6 +105,15 @@
 - **Conseguenze accettate**: costo di manutenzione documentale; rischio di dogmatismo (mitigato: ogni regola ha il suo processo di revisione).
 - **Revisione**: il processo di emendamento è dentro la Constitution stessa (Titolo X).
 
+## D-12 · Notifiche reintrodotte nel perimetro dello Sprint 3 (Scope Change)
+
+- **Problema**: lo Sprint 3 era stato ridefinito a metà lavorazione ("Core Sync Engine") escludendo esplicitamente `core-notifications` dal perimetro immediato, per concentrare lo sprint sul solo motore di sincronizzazione. Con `core-sync`/`core-security`/`core-search` già completati e verificati, si è posta la domanda se estendere ulteriormente lo sprint a `core-notifications` prima di chiuderlo, o rimandarlo a un futuro sprint dedicato.
+- **Alternative**: (a) mantenere l'esclusione e chiudere lo Sprint 3 come "solo Sync Engine" (rimandando le notifiche a uno sprint futuro); (b) reintrodurre le notifiche in questo stesso sprint, con la stessa profondità (interfacce, implementazione, test, benchmark, documentazione) già applicata a `core-sync`.
+- **Decisione**: (b). Approvata esplicitamente dall'owner del prodotto come Scope Change durante lo Sprint 3, con richiesta esplicita di implementare tutti i 15 sottocomponenti dichiarati (Notification Scheduler, Local/Recurring/Notification Actions, Deep Links, Categories, Permissions, Channels, Snooze, Smart Reschedule, Timezone Handling, Quiet Hours, Background Delivery, Retry Logic, History).
+- **Motivazione**: l'infrastruttura condivisa (`core-sync`/`core-security`/`core-search`) era già in uno stato stabile e verificato quando la richiesta è arrivata; completare anche `core-notifications` nello stesso sprint chiude l'intero perimetro "Core Platform" originariamente dichiarato (prima del raffinamento a metà sprint) senza lasciare un sottosistema Core a metà, ed è coerente con NTF-001…008 già interamente specificati dalla Functional Bible (nessun lavoro di specifica mancante da attendere).
+- **Conseguenze accettate**: lo sprint si allunga oltre il perimetro "solo Sync Engine" comunicato a metà lavorazione; alcune decisioni tecniche non coperte dalle Bible esistenti (durata della finestra di rilevanza per lo smart reschedule, semantica esatta del collasso "burst" a 50 richieste/ora, backoff del retry di consegna, formato dell'URI dei deep link, mappatura categoria→canale) sono state registrate come nuove voci TDR (TDR-29…33) prima/durante l'implementazione, non lasciate implicite.
+- **Revisione se**: un futuro sprint scoprisse che una di queste decisioni tecniche (in particolare la semantica del burst o la finestra di rilevanza) non regge all'uso reale — si rivede la singola voce TDR, non questa decisione di scope.
+
 ---
 
 ## Registro aperto
