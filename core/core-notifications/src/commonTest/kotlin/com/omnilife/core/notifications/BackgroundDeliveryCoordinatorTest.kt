@@ -29,14 +29,14 @@ class BackgroundDeliveryCoordinatorTest {
         id: String,
         scheduledFor: Instant,
     ) = NotificationRequest(
-            id = id,
-            category = category,
-            priority = NotificationPriority.PROMEMORIA_UTENTE,
-            entityReference = EntityReference("task-1", "task"),
-            title = "t",
-            body = "b",
-            scheduledFor = scheduledFor,
-        )
+        id = id,
+        category = category,
+        priority = NotificationPriority.PROMEMORIA_UTENTE,
+        entityReference = EntityReference("task-1", "task"),
+        title = "t",
+        body = "b",
+        scheduledFor = scheduledFor,
+    )
 
     @Test
     fun `runOnce delivers a quiet-hours-deferred request once wake time arrives`() {
