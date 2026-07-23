@@ -31,7 +31,7 @@ class QuietHoursTest {
     }
 
     @Test
-    fun `a non-wrapping window (e.g. 13-15) works the same way`() {
+    fun `a non-wrapping window, for example 13-15, works the same way`() {
         val window = QuietHoursWindow(startHour = 13, endHour = 15)
         assertTrue(QuietHours.isQuietAt(Instant.parse("2026-01-01T14:00:00Z"), zone, window))
         assertFalse(QuietHours.isQuietAt(Instant.parse("2026-01-01T16:00:00Z"), zone, window))

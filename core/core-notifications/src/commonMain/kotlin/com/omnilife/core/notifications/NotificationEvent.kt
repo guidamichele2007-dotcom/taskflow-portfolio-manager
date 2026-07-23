@@ -1,6 +1,5 @@
 package com.omnilife.core.notifications
 
-import com.omnilife.core.common.EntityId
 import com.omnilife.core.eventbus.DomainEvent
 import kotlinx.datetime.Instant
 
