@@ -13,9 +13,10 @@ import java.util.concurrent.TimeUnit
  * useful for a future desktop build (README-BUILD.md §4).
  */
 public actual class NotificationScheduler {
-    private val executor: ScheduledExecutorService = Executors.newSingleThreadScheduledExecutor { runnable ->
-        Thread(runnable, "omnilife-notification-scheduler").apply { isDaemon = true }
-    }
+    private val executor: ScheduledExecutorService =
+        Executors.newSingleThreadScheduledExecutor { runnable ->
+            Thread(runnable, "omnilife-notification-scheduler").apply { isDaemon = true }
+        }
     private val pending = ConcurrentHashMap<String, ScheduledFuture<*>>()
 
     public actual fun schedule(
