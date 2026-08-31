@@ -20,8 +20,17 @@ public data class TaskListUiState(
     val errorMessage: String? = null,
     /** Non-null while the UI must ask "complete all subtasks / keep open" (TASK-AC-03). */
     val pendingSubtaskChoiceForTaskId: EntityId? = null,
+    /**
+     * MFC-R-09/MFC-R-11 (Sprint 6): "1 gesture + immediate undo" — non-null right after a
+     * successful delete, until the snackbar's own timeout or the next delete supersedes it. The
+     * `RestoreTask` use case this drives already existed and was unit-tested since it was written,
+     * but nothing in the UI ever called it — found during this sprint's task-cycle audit.
+     */
+    val pendingUndoDelete: PendingUndoDelete? = null,
 ) {
     /** MUC §6: empty-never-used vs empty-filtered are visually distinct states. */
     public val isEmpty: Boolean get() = !isLoading && tasks.isEmpty()
     public val isFiltered: Boolean get() = searchQuery.isNotBlank() || filter != TaskFilter()
 }
+
+public data class PendingUndoDelete(val taskId: EntityId, val taskTitle: String)

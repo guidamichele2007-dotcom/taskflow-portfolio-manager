@@ -20,6 +20,12 @@ public sealed interface TaskListIntent {
 
     public data class Delete(val taskId: EntityId) : TaskListIntent
 
+    /** MFC-R-10/R-11 (Sprint 6): undoes a [Delete] via [TaskListUiState.pendingUndoDelete]. */
+    public data class UndoDelete(val taskId: EntityId) : TaskListIntent
+
+    /** The snackbar's own timeout elapsed (or it was superseded) without the user tapping undo. */
+    public data object DismissUndoDelete : TaskListIntent
+
     public data class Postpone(val taskId: EntityId, val target: PostponeTarget) : TaskListIntent
 
     public data class Reorder(val orderedTaskIds: List<EntityId>) : TaskListIntent

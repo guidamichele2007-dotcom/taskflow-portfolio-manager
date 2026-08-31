@@ -10,6 +10,7 @@ import com.omnilife.domain.task.usecase.GetTasksForView
 import com.omnilife.domain.task.usecase.PostponeTarget
 import com.omnilife.domain.task.usecase.PostponeTask
 import com.omnilife.domain.task.usecase.ReorderTasks
+import com.omnilife.domain.task.usecase.RestoreTask
 import com.omnilife.domain.task.usecase.SearchTasks
 import com.omnilife.domain.task.usecase.TaskListMode
 import com.omnilife.domain.task.usecase.UncompleteTask
@@ -54,6 +55,7 @@ class TaskListViewModelTest {
             completeTask = CompleteTask(repository, eventBus, newId = { "generated" }, clock = clock),
             uncompleteTask = UncompleteTask(repository, eventBus, clock),
             deleteTask = DeleteTask(repository, eventBus, clock),
+            restoreTask = RestoreTask(repository, eventBus, clock),
             postponeTask = PostponeTask(repository, eventBus, clock, TimeZone.UTC),
             reorderTasks = ReorderTasks(repository, clock),
             searchTasks = SearchTasks(repository),
@@ -180,6 +182,57 @@ class TaskListViewModelTest {
 
             assertEquals(LocalDate(2026, 7, 22), repository.tasks.getValue("today").dueDate)
             // Tomorrow's date no longer belongs to the Today view.
+            assertTrue(viewModel.state.value.tasks.none { it.envelope.id == "today" })
+        }
+
+    @Test
+    fun `deleting a task removes it from the view and offers an undo prompt with its title`() =
+        runTest {
+            val scope = CoroutineScope(UnconfinedTestDispatcher())
+            val repository =
+                FakeTaskRepository().apply {
+                    tasks["today"] = task("today", LocalDate(2026, 7, 21))
+                }
+            val viewModel = viewModel(repository, scope)
+
+            viewModel.dispatch(TaskListIntent.Delete("today"))
+
+            assertTrue(viewModel.state.value.tasks.none { it.envelope.id == "today" })
+            assertEquals("today", viewModel.state.value.pendingUndoDelete?.taskTitle)
+            assertEquals("today", viewModel.state.value.pendingUndoDelete?.taskId)
+        }
+
+    @Test
+    fun `UndoDelete (Sprint 6 fix) genuinely restores the task and clears the prompt`() =
+        runTest {
+            val scope = CoroutineScope(UnconfinedTestDispatcher())
+            val repository =
+                FakeTaskRepository().apply {
+                    tasks["today"] = task("today", LocalDate(2026, 7, 21))
+                }
+            val viewModel = viewModel(repository, scope)
+            viewModel.dispatch(TaskListIntent.Delete("today"))
+
+            viewModel.dispatch(TaskListIntent.UndoDelete("today"))
+
+            assertEquals(listOf("today"), viewModel.state.value.tasks.map { it.envelope.id })
+            assertEquals(null, viewModel.state.value.pendingUndoDelete)
+        }
+
+    @Test
+    fun `DismissUndoDelete clears the prompt without touching the task`() =
+        runTest {
+            val scope = CoroutineScope(UnconfinedTestDispatcher())
+            val repository =
+                FakeTaskRepository().apply {
+                    tasks["today"] = task("today", LocalDate(2026, 7, 21))
+                }
+            val viewModel = viewModel(repository, scope)
+            viewModel.dispatch(TaskListIntent.Delete("today"))
+
+            viewModel.dispatch(TaskListIntent.DismissUndoDelete)
+
+            assertEquals(null, viewModel.state.value.pendingUndoDelete)
             assertTrue(viewModel.state.value.tasks.none { it.envelope.id == "today" })
         }
 

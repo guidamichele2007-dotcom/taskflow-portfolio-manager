@@ -10,6 +10,7 @@ import com.omnilife.domain.task.usecase.DeleteTask
 import com.omnilife.domain.task.usecase.GetTasksForView
 import com.omnilife.domain.task.usecase.PostponeTask
 import com.omnilife.domain.task.usecase.ReorderTasks
+import com.omnilife.domain.task.usecase.RestoreTask
 import com.omnilife.domain.task.usecase.SearchTasks
 import com.omnilife.domain.task.usecase.UncompleteTask
 import kotlinx.coroutines.CoroutineScope
@@ -32,6 +33,7 @@ public class TaskListViewModel(
     private val completeTask: CompleteTask,
     private val uncompleteTask: UncompleteTask,
     private val deleteTask: DeleteTask,
+    private val restoreTask: RestoreTask,
     private val postponeTask: PostponeTask,
     private val reorderTasks: ReorderTasks,
     private val searchTasks: SearchTasks,
@@ -71,11 +73,16 @@ public class TaskListViewModel(
                     refresh()
                 }
 
-            is TaskListIntent.Delete ->
+            is TaskListIntent.Delete -> scope.launch { handleDelete(intent.taskId) }
+
+            is TaskListIntent.UndoDelete ->
                 scope.launch {
-                    deleteTask(intent.taskId).onFailure(::reportError)
+                    restoreTask(intent.taskId).onFailure(::reportError)
+                    _state.update { it.copy(pendingUndoDelete = null) }
                     refresh()
                 }
+
+            TaskListIntent.DismissUndoDelete -> _state.update { it.copy(pendingUndoDelete = null) }
 
             is TaskListIntent.Postpone ->
                 scope.launch {
@@ -116,6 +123,17 @@ public class TaskListViewModel(
                 reportError(error)
             }
         }
+    }
+
+    /** MFC-R-09/R-11 (Sprint 6): "1 gesture + immediate undo" — never a confirmation dialog. */
+    private suspend fun handleDelete(taskId: EntityId) {
+        val title = _state.value.tasks.find { it.envelope.id == taskId }?.title
+        deleteTask(taskId)
+            .onSuccess {
+                val undo = title?.let { taskTitle -> PendingUndoDelete(taskId, taskTitle) }
+                _state.update { it.copy(pendingUndoDelete = undo) }
+            }.onFailure(::reportError)
+        refresh()
     }
 
     private fun reportError(error: DomainError) {

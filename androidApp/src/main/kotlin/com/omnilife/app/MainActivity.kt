@@ -235,6 +235,7 @@ private fun rememberTaskListViewModel(container: AppContainer): TaskListViewMode
                 completeTask = container.completeTask,
                 uncompleteTask = container.uncompleteTask,
                 deleteTask = container.deleteTask,
+                restoreTask = container.restoreTask,
                 postponeTask = container.postponeTask,
                 reorderTasks = container.reorderTasks,
                 searchTasks = container.searchTasks,

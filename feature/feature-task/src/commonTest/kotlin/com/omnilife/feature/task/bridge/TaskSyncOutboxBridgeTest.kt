@@ -6,8 +6,10 @@ import com.omnilife.core.sync.InMemorySyncOutboxStore
 import com.omnilife.core.sync.InMemorySyncStateManager
 import com.omnilife.domain.task.usecase.CompleteTask
 import com.omnilife.domain.task.usecase.CreateTask
+import com.omnilife.domain.task.usecase.DeleteTask
 import com.omnilife.domain.task.usecase.Edit
 import com.omnilife.domain.task.usecase.NewTaskDetails
+import com.omnilife.domain.task.usecase.RestoreTask
 import com.omnilife.domain.task.usecase.TaskFieldEdits
 import com.omnilife.domain.task.usecase.UpdateTaskFields
 import com.omnilife.feature.task.FakeTaskRepository
@@ -135,6 +137,26 @@ class TaskSyncOutboxBridgeTest {
 
             updateTaskFields("task-1", TaskFieldEdits(title = Edit.Set("Buy oat milk")))
             completeTask("task-1")
+
+            assertEquals(3, outboxStore.size())
+        }
+
+    @Test
+    fun `restoring a trashed task enqueues an outbox item too (Sprint 6 fix)`() =
+        runTest {
+            val repository = FakeTaskRepository()
+            val eventBus = InMemoryEventBus()
+            val outboxStore = InMemorySyncOutboxStore()
+            val syncStateManager = InMemorySyncStateManager()
+            val scope = CoroutineScope(UnconfinedTestDispatcher())
+            newBridge(repository, eventBus, outboxStore, syncStateManager, scope)
+            val createTask = CreateTask(repository, eventBus, newId = { "task-1" }, clock = SyncFixedClock(now))
+            createTask("Buy milk", listId = "list-1", ownerAccountId = "acc-1", deviceId = "dev-1")
+            val deleteTask = DeleteTask(repository, eventBus, clock = SyncFixedClock(now))
+            deleteTask("task-1")
+            val restoreTask = RestoreTask(repository, eventBus, clock = SyncFixedClock(now))
+
+            restoreTask("task-1")
 
             assertEquals(3, outboxStore.size())
         }

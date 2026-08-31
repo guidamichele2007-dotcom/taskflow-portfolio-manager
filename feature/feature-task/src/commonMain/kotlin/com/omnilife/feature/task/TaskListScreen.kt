@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import com.omnilife.core.common.EntityId
@@ -19,11 +20,16 @@ import com.omnilife.core.designsystem.components.OmniListItem
 import com.omnilife.core.designsystem.components.OmniLoadingState
 import com.omnilife.core.designsystem.components.OmniSearchField
 import com.omnilife.core.designsystem.components.OmniSegmentedControl
+import com.omnilife.core.designsystem.components.OmniSnackbarHost
+import com.omnilife.core.designsystem.components.OmniSnackbarHostState
+import com.omnilife.core.designsystem.components.OmniSnackbarMessage
 import com.omnilife.core.designsystem.components.OmniTopBar
+import com.omnilife.core.designsystem.components.rememberOmniSnackbarHostState
 import com.omnilife.core.designsystem.theme.OmniIconType
 import com.omnilife.core.designsystem.theme.OmniTheme
 import com.omnilife.domain.task.Task
 import com.omnilife.domain.task.usecase.TaskListMode
+import kotlinx.coroutines.delay
 import kotlinx.datetime.Clock
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.todayIn
@@ -43,6 +49,9 @@ public fun TaskListScreen(
     onCapture: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val snackbarHostState = rememberOmniSnackbarHostState()
+    UndoDeleteSnackbarEffect(state = state, onIntent = onIntent, snackbarHostState = snackbarHostState)
+
     Box(modifier = modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
             OmniTopBar(title = "Attività")
@@ -73,6 +82,39 @@ public fun TaskListScreen(
                 modifier = Modifier.align(Alignment.BottomCenter).padding(OmniTheme.spacing.spazio3),
             )
         }
+        OmniSnackbarHost(
+            state = snackbarHostState,
+            modifier = Modifier.align(Alignment.BottomCenter).padding(OmniTheme.spacing.spazio3),
+        )
+    }
+}
+
+/** Mirrors OmniSnackbarHost's own (private) 7s duration so the ViewModel's undo state doesn't outlive it. */
+private const val SNACKBAR_DURATION_MS = 7000L
+
+/**
+ * MFC-R-09/R-11 (Sprint 6): shows the real Undo affordance `RestoreTask` (unit-tested since it was
+ * first written) never had a caller for — found during this sprint's task-cycle audit.
+ */
+@Composable
+private fun UndoDeleteSnackbarEffect(
+    state: TaskListUiState,
+    onIntent: (TaskListIntent) -> Unit,
+    snackbarHostState: OmniSnackbarHostState,
+) {
+    val pending = state.pendingUndoDelete
+    LaunchedEffect(pending) {
+        if (pending == null) return@LaunchedEffect
+        snackbarHostState.show(
+            OmniSnackbarMessage(
+                text = "\"${pending.taskTitle}\" eliminata",
+                actionLabel = "Annulla",
+                onAction = { onIntent(TaskListIntent.UndoDelete(pending.taskId)) },
+                onSupersededSilently = { onIntent(TaskListIntent.DismissUndoDelete) },
+            ),
+        )
+        delay(SNACKBAR_DURATION_MS)
+        onIntent(TaskListIntent.DismissUndoDelete)
     }
 }
 

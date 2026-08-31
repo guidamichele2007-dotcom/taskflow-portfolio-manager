@@ -35,8 +35,10 @@ import com.omnilife.domain.task.usecase.DeleteSubtask
 import com.omnilife.domain.task.usecase.DeleteTask
 import com.omnilife.domain.task.usecase.GetTasksForView
 import com.omnilife.domain.task.usecase.PostponeTask
+import com.omnilife.domain.task.usecase.PermanentlyDeleteTask
 import com.omnilife.domain.task.usecase.ReorderSubtasks
 import com.omnilife.domain.task.usecase.ReorderTasks
+import com.omnilife.domain.task.usecase.RestoreTask
 import com.omnilife.domain.task.usecase.SearchTasks
 import com.omnilife.domain.task.usecase.ToggleSubtask
 import com.omnilife.domain.task.usecase.UncompleteTask
@@ -125,6 +127,8 @@ public class AppContainer(context: Context) {
     public val completeTask: CompleteTask = CompleteTask(taskRepository, eventBus, newId = ::newId)
     public val uncompleteTask: UncompleteTask = UncompleteTask(taskRepository, eventBus)
     public val deleteTask: DeleteTask = DeleteTask(taskRepository, eventBus)
+    public val restoreTask: RestoreTask = RestoreTask(taskRepository, eventBus)
+    public val permanentlyDeleteTask: PermanentlyDeleteTask = PermanentlyDeleteTask(taskRepository, eventBus)
     public val postponeTask: PostponeTask = PostponeTask(taskRepository, eventBus)
     public val reorderTasks: ReorderTasks = ReorderTasks(taskRepository)
     public val searchTasks: SearchTasks = SearchTasks(taskRepository)

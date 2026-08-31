@@ -15,6 +15,7 @@ import com.omnilife.domain.task.usecase.CreateTask
 import com.omnilife.domain.task.usecase.DeleteTask
 import com.omnilife.domain.task.usecase.Edit
 import com.omnilife.domain.task.usecase.NewTaskDetails
+import com.omnilife.domain.task.usecase.RestoreTask
 import com.omnilife.domain.task.usecase.TaskFieldEdits
 import com.omnilife.domain.task.usecase.UpdateTaskFields
 import com.omnilife.feature.task.FakeTaskRepository
@@ -205,6 +206,37 @@ class TaskNotificationBridgeTest {
             deleteTask("task-1")
 
             assertTrue("task-1" in localService.cancelled)
+        }
+
+    @Test
+    fun `restoring a trashed task with a reminder reschedules it (Sprint 6 fix)`() =
+        runTest {
+            val repository = FakeTaskRepository()
+            val eventBus = InMemoryEventBus()
+            val localService = RecordingLocalNotificationService()
+            val scope = CoroutineScope(UnconfinedTestDispatcher())
+            newBridge(repository, eventBus, localService, scope)
+            val createTask = CreateTask(repository, eventBus, newId = { "task-1" }, clock = FixedClock(now))
+            createTask(
+                "Call the dentist",
+                listId = "list-1",
+                ownerAccountId = "acc-1",
+                deviceId = "dev-1",
+                details =
+                    NewTaskDetails(
+                        dueDate = LocalDate(2026, 1, 2),
+                        dueTime = LocalTime(9, 0),
+                        reminderConfig = ReminderConfig(),
+                    ),
+            )
+            val deleteTask = DeleteTask(repository, eventBus, clock = FixedClock(now))
+            deleteTask("task-1")
+            assertTrue("task-1" in localService.cancelled)
+            val restoreTask = RestoreTask(repository, eventBus, clock = FixedClock(now))
+
+            restoreTask("task-1")
+
+            assertEquals(listOf("task-1"), localService.scheduled.map { it.id })
         }
 
     @Test
