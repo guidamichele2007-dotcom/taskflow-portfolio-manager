@@ -1,0 +1,31 @@
+# Shared detekt ruleset (README-BUILD.md §7). buildUponDefaultConfig (set in
+# the convention plugin) keeps every other default rule active.
+
+style:
+  MagicNumber:
+    active: false # placeholder modules have no business logic to trigger false positives on yet
+  ReturnCount:
+    max: 4 # guard-clause style early returns for validation failures (OmniResult.Failure) read better than nesting
+
+comments:
+  UndocumentedPublicClass:
+    active: false # bootstrap placeholders are intentionally undocumented; see each module's README.md instead
+  UndocumentedPublicFunction:
+    active: false
+
+complexity:
+  TooManyFunctions:
+    thresholdInInterfaces: 17 # a single-entity-family repository (Task/TaskList/Subtask CRUD) legitimately needs this many
+    thresholdInClasses: 17
+    thresholdInFiles: 17 # OmniIcons.kt (TDR-22) draws ~11 glyphs as private top-level functions in one file by design (one stroke style, one file)
+  LongParameterList:
+    constructorThreshold: 10 # manual-DI composition roots (TDR-19) take one constructor param per injected use case
+    functionThreshold: 12 # Compose components (TDR-22) take one parameter per Bible-documented property/state/callback (OmniButton, OmniListItem, OmniDialog...)
+  LongMethod:
+    threshold: 70 # an MVI dispatch() `when` over many intents (TDR-02) is inherently long, one line per intent branch
+
+naming:
+  FunctionNaming:
+    ignoreAnnotated: ["Composable"] # Jetpack Compose's own style guide: composables are PascalCase (TDR-22), not verbs
+  MatchingDeclarationName:
+    active: false # core-designsystem (TDR-22) names files after the primary @Composable (Button.kt), not every enum/private helper it also declares

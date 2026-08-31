@@ -1,0 +1,108 @@
+-- Schema + queries for the Task module (DM-TASK-01/02/03). Recurrence and
+-- reminder structures are stored as JSON text (kotlinx-serialization) since
+-- SQLDelight columns are scalar — see TaskMappers.kt for the (de)serialization.
+
+CREATE TABLE taskListEntity (
+    id TEXT NOT NULL PRIMARY KEY,
+    ownerAccountId TEXT NOT NULL,
+    schemaVersion INTEGER NOT NULL,
+    createdAt TEXT NOT NULL,
+    createdByDevice TEXT NOT NULL,
+    modifiedAt TEXT NOT NULL,
+    modifiedByDevice TEXT NOT NULL,
+    lifecycleState TEXT NOT NULL,
+    trashedAt TEXT,
+    name TEXT NOT NULL,
+    area TEXT,
+    isDefault INTEGER NOT NULL,
+    manualOrder INTEGER
+);
+
+CREATE TABLE taskEntity (
+    id TEXT NOT NULL PRIMARY KEY,
+    ownerAccountId TEXT NOT NULL,
+    schemaVersion INTEGER NOT NULL,
+    createdAt TEXT NOT NULL,
+    createdByDevice TEXT NOT NULL,
+    modifiedAt TEXT NOT NULL,
+    modifiedByDevice TEXT NOT NULL,
+    lifecycleState TEXT NOT NULL,
+    trashedAt TEXT,
+    title TEXT NOT NULL,
+    dueDate TEXT,
+    dueTime TEXT,
+    priority TEXT NOT NULL,
+    recurrenceRuleJson TEXT,
+    listId TEXT NOT NULL,
+    notes TEXT,
+    completed INTEGER NOT NULL,
+    completedAt TEXT,
+    manualOrder INTEGER,
+    reminderConfigJson TEXT,
+    FOREIGN KEY (listId) REFERENCES taskListEntity(id)
+);
+
+CREATE TABLE subtaskEntity (
+    id TEXT NOT NULL PRIMARY KEY,
+    taskId TEXT NOT NULL,
+    title TEXT NOT NULL,
+    completed INTEGER NOT NULL,
+    orderIndex INTEGER NOT NULL,
+    FOREIGN KEY (taskId) REFERENCES taskEntity(id)
+);
+
+-- TaskList queries
+
+insertOrReplaceTaskList:
+INSERT OR REPLACE INTO taskListEntity(
+    id, ownerAccountId, schemaVersion, createdAt, createdByDevice, modifiedAt, modifiedByDevice,
+    lifecycleState, trashedAt, name, area, isDefault, manualOrder
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+selectTaskListById:
+SELECT * FROM taskListEntity WHERE id = ?;
+
+selectAllTaskLists:
+SELECT * FROM taskListEntity;
+
+-- Task queries
+
+insertOrReplaceTask:
+INSERT OR REPLACE INTO taskEntity(
+    id, ownerAccountId, schemaVersion, createdAt, createdByDevice, modifiedAt, modifiedByDevice,
+    lifecycleState, trashedAt, title, dueDate, dueTime, priority, recurrenceRuleJson, listId, notes,
+    completed, completedAt, manualOrder, reminderConfigJson
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+selectTaskById:
+SELECT * FROM taskEntity WHERE id = ?;
+
+selectTasksByLifecycle:
+SELECT * FROM taskEntity WHERE lifecycleState = ?;
+
+selectTasksByLifecycleAndList:
+SELECT * FROM taskEntity WHERE lifecycleState = ? AND listId = ?;
+
+selectTasksByLifecycleAndPriority:
+SELECT * FROM taskEntity WHERE lifecycleState = ? AND priority = ?;
+
+searchTasksByLifecycle:
+SELECT * FROM taskEntity
+WHERE lifecycleState = ? AND (title LIKE '%' || :query || '%' OR notes LIKE '%' || :query || '%');
+
+deleteTaskPermanently:
+DELETE FROM taskEntity WHERE id = ?;
+
+-- Subtask queries
+
+insertOrReplaceSubtask:
+INSERT OR REPLACE INTO subtaskEntity(id, taskId, title, completed, orderIndex) VALUES (?, ?, ?, ?, ?);
+
+selectSubtasksByTaskId:
+SELECT * FROM subtaskEntity WHERE taskId = ? ORDER BY orderIndex ASC;
+
+deleteSubtaskById:
+DELETE FROM subtaskEntity WHERE id = ?;
+
+deleteSubtasksByTaskId:
+DELETE FROM subtaskEntity WHERE taskId = ?;

@@ -1,0 +1,35 @@
+-- Global search index (TDR-25): a single SQLite FTS5 virtual table, a
+-- derived/reconstructible projection (Technical Architecture Bible §13,
+-- Data Model Bible §11 — never a source of truth). Generic across every
+-- module: no column here is specific to Task/Note/Finance/etc.
+
+-- Every column needs an explicit typename or SQLDelight's interface
+-- generator fails (typenames are optional to SQLite itself for FTS5, but
+-- required here — see sqldelight/sqldelight#4001).
+CREATE VIRTUAL TABLE searchIndexEntry USING fts5(
+    entityId TEXT UNINDEXED,
+    entityType TEXT UNINDEXED,
+    title TEXT,
+    content TEXT,
+    category TEXT UNINDEXED,
+    lifecycleState TEXT UNINDEXED,
+    createdAtEpochSeconds INTEGER UNINDEXED,
+    modifiedAtEpochSeconds INTEGER UNINDEXED
+);
+
+removeEntry:
+DELETE FROM searchIndexEntry WHERE entityId = ?;
+
+insertEntry:
+INSERT INTO searchIndexEntry(
+    entityId, entityType, title, content, category, lifecycleState, createdAtEpochSeconds, modifiedAtEpochSeconds
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+
+deleteAll:
+DELETE FROM searchIndexEntry;
+
+matchQuery:
+SELECT * FROM searchIndexEntry WHERE searchIndexEntry MATCH :ftsQuery;
+
+countAll:
+SELECT count(*) FROM searchIndexEntry;

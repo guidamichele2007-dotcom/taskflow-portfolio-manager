@@ -1,0 +1,56 @@
+# Minimal CI (README-BUILD.md §9, TDR-14: pipeline as-code, portable, not
+# tied to a single provider). Runs on GitHub-hosted runners here, but the
+# steps themselves (Gradle, Go) are portable to any containerized runner.
+#
+# Bootstrap scope: builds/tests/lints what this repository actually contains
+# today — placeholder modules, no business logic. Android and iOS jobs
+# (requiring an Android SDK / macOS+Xcode runner respectively) are a
+# first-sprint TODO, see docs/omnilife/bootstrap_infrastructure_report.md.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  kotlin-jvm:
+    name: Kotlin Multiplatform (JVM target)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Gradle build (checkAll — JVM target, lint, tests)
+        uses: gradle/actions/setup-gradle@v4
+
+      - run: ./gradlew checkAll --console=plain
+
+  go-backend:
+    name: Go backend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+
+      - run: go build ./...
+      - run: go vet ./...
+      - run: go test ./...
+      - run: gofmt -l . | tee /tmp/gofmt.out && test ! -s /tmp/gofmt.out
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          working-directory: backend
