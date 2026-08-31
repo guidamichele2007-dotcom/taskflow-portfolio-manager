@@ -3,11 +3,12 @@
 **Perché questo documento esiste**: questo sandbox non ha un Android SDK/emulatore (vedi
 `README-BUILD.md` §4) — `androidApp` non è mai stato compilato né eseguito qui. Ogni riga di
 questo file è quindi una **checklist da eseguire realmente su un dispositivo o emulatore Android**,
-non un resoconto di test già passati. Sprint 6 ("MVP Hardening + Real Device Readiness") ha
-verificato tutto ciò che è genuinamente verificabile senza SDK — compilazione reale
-(`compileKotlinJvm`/`compileTestKotlinJvm`), test comportamentali della logica condivisa
-(`jvmTest`), `detekt`/`ktlintCheck` — e ha corretto diversi bug reali trovati leggendo il codice
-Android-specifico con attenzione (vedi `sprint6_report.md` §6). Quello che segue è ciò che resta.
+non un resoconto di test già passati. Sprint 6 ("MVP Hardening + Real Device Readiness") e poi MVP
+Release 1.0 hanno verificato tutto ciò che è genuinamente verificabile senza SDK — compilazione
+reale (`compileKotlinJvm`/`compileTestKotlinJvm`), test comportamentali della logica condivisa
+(`jvmTest`), `detekt`/`ktlintCheck` — e hanno corretto diversi bug reali trovati leggendo il codice
+Android-specifico con attenzione (vedi `sprint6_report.md` §6 e `mvp_release_report.md`). Quello
+che segue è ciò che resta.
 
 ## 0. Prerequisiti per il primo build reale
 
@@ -50,14 +51,21 @@ Android-specifico con attenzione (vedi `sprint6_report.md` §6). Quello che segu
   se il toggle è già attivo o va concesso manualmente; con il toggle negato l'app deve comunque
   programmare un promemoria (con un ritardo leggermente meno preciso, `setAndAllowWhileIdle`), mai
   crashare con `SecurityException` (guardia aggiunta in `NotificationScheduler.kt` questo sprint).
-- [ ] Tap sulla notifica: deve aprire l'app (verificato che il `PendingIntent` apra `MainActivity`);
-  **limite noto**: apre l'app alla schermata normale, non salta ancora direttamente al task specifico
-  (il deep link `omnilife://task/<id>` esiste come stringa ma non è ancora interpretato da
-  `MainActivity` — nessuna navigazione basata su Intent è cablata).
+- [ ] Tap sulla notifica: deve aprire l'app **direttamente sul Detail del task specifico** (MVP
+  Release 1.0: `NotificationFireReceiver` passa l'id del task a `MainActivity` via
+  `EXTRA_OPEN_TASK_ID`; verificare sia a freddo — app non in esecuzione — sia con l'app già aperta
+  su un'altra schermata, dove deve arrivare tramite `onNewIntent`/`singleTask`, non aprire una
+  seconda istanza dell'app).
 - [ ] Completare/eliminare un task con promemoria attivo: il promemoria programmato deve sparire
   (verificabile indirettamente aspettando l'orario programmato e controllando che non compaia).
 - [ ] Eliminare un task con promemoria, poi toccare "Annulla" nello snackbar entro 7s: il promemoria
-  deve essere ri-programmato (fix di questo sprint — `RestoreTask` ora notifica il bridge).
+  deve essere ri-programmato (fix Sprint 6 — `RestoreTask` ora notifica il bridge); verificare anche
+  che lo snackbar non sia coperto dal FAB (bug di sovrapposizione trovato e corretto in questo ciclo).
+- [ ] **Riavviare il dispositivo** con almeno un task futuro con promemoria attivo: dopo il riavvio,
+  il promemoria deve comunque scattare all'orario previsto — `BootCompletedReceiver` (MVP Release
+  1.0) re-interroga `TaskRepository` e ri-programma ogni promemoria attivo, perché `AlarmManager`
+  cancella ogni allarme pendente ad ogni riavvio (comportamento di Android stesso, non un bug di
+  questa app). Verificare che l'app non debba essere aperta manualmente perché questo avvenga.
 
 ## 3. Task — ciclo completo
 
@@ -120,12 +128,17 @@ Android-specifico con attenzione (vedi `sprint6_report.md` §6). Quello che segu
 - [ ] Verificare che il minify (`proguard-rules.pro`, ancora minimale) non rompa nulla di visibile —
   prima verifica reale di questo file mai eseguita.
 
-## 8. Icona e branding
+## 8. Icona, adaptive icon e splash screen
 
-- [ ] **Gap noto, non un bug**: l'app non ha ancora un'icona reale (`res/` è vuoto, nessun
-  `android:icon` nel manifest) — installa con l'icona generica di sistema. È una decisione di
-  brand/design fuori dal perimetro di un audit di hardening tecnico; da fare prima di qualunque
-  distribuzione reale (anche interna).
+- [ ] All'installazione, l'icona reale (sfondo blu `OmniAccent.BLU`, segno di spunta bianco — MVP
+  Release 1.0, `res/mipmap-anydpi-v26/`) deve comparire nel launcher, non l'icona generica di
+  sistema. Verificare anche la forma adattiva (cerchio/squircle/altre maschere OEM) — il segno di
+  spunta deve restare interamente visibile, non tagliato dalla maschera.
+  All'avvio, deve comparire lo splash screen di sistema (stesso blu, stessa icona) prima della UI
+  — non un lampo bianco, e non deve restare visibile più a lungo del necessario (si chiude appena
+  l'avvio asincrono dell'app completa).
+- [ ] **Nota**: questa resta una scelta tecnica minima, non una decisione di brand/design definitiva
+  — un vero lavoro di branding (prima di qualunque distribuzione reale) resta da fare.
 
 ## 9. Accessibilità (spot-check su dispositivo reale)
 
