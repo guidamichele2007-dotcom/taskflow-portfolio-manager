@@ -46,10 +46,10 @@ Le regole seguono meccanicamente la Dependency Rule già stabilita ([Technical A
 
 - `core-*` non dipende mai da `domain-*`, `feature-*` o `platform-*` (i Servizi Core sono a valle di nessun dominio).
 - `domain-*` dipende solo da `core-*` (mai da un altro `domain-*`: i domini sono indipendenti fra loro, coerente con l'isolamento dei moduli plugin).
-- `feature-*` dipende dal proprio `domain-*` e da `core-designtokens`; mai da `platform-*` direttamente (gli Adattatori sono iniettati, non referenziati).
+- `feature-*` dipende dal proprio `domain-*` e dai moduli `core-*` che le sue schermate/bridge orchestrano realmente (`core-designsystem`/`core-designtokens` per la UI; `core-search`/`core-sync`/`core-notifications`/`core-eventbus` per i bridge L2 che collegano il proprio `domain-*` ai Servizi Core — Sprint 5, es. `TaskSearchIndexBridge`/`TaskNotificationBridge`/`TaskSyncOutboxBridge` in `feature-task`); mai da un altro `feature-*` né da `platform-*` direttamente (gli Adattatori sono iniettati, non referenziati).
 - `platform-*` implementa le interfacce (`port`) dichiarate in `core-*`; dipende solo da `core-*`.
 - `shared` aggrega tutti i moduli `core-*`/`domain-*` (non `feature-*`/`platform-*`: è il confine di export del dominio condiviso verso le UI native, non un bundle applicativo).
-- `androidApp`/`iosApp` dipendono **solo** da `shared`, mai da un modulo `core-*`/`domain-*` individuale — questo è ciò che rende verificabile meccanicamente (in futuro, come gate CI dedicato, TDR-14) che la UI nativa non aggiri il confine del dominio condiviso.
+- `androidApp`/`iosApp` dipendono da `shared` **più** ciascun modulo `feature-*` di cui mostrano effettivamente le schermate — mai l'inverso (nessun `feature-*` dipende da `androidApp`/`iosApp`), e mai da un `core-*`/`domain-*` individuale scavalcando `shared` (TDR-37, Sprint 5: questa regola valeva letteralmente "solo `shared`" finché nessuna schermata reale esisteva ancora in `feature-*`; con `feature-core`/`feature-task`/`feature-search`/`feature-settings` che ora contengono ViewModel e schermate Compose reali, l'app shell deve poter dipendere anche da quelli — `shared` stesso resta invariato, aggrega solo `core-*`/`domain-*`).
 
 Non esiste ancora un controllo automatico di queste regole (nessun gate di dipendenza in CI in questo bootstrap) — è un TODO del primo sprint, vedi report del bootstrap.
 

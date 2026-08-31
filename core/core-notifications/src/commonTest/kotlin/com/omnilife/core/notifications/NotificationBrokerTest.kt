@@ -10,6 +10,7 @@ import kotlin.test.assertTrue
 
 private class FakeLocalNotificationService : LocalNotificationService {
     val shown = mutableListOf<NotificationRequest>()
+    val cancelled = mutableListOf<String>()
 
     override fun show(
         request: NotificationRequest,
@@ -20,7 +21,9 @@ private class FakeLocalNotificationService : LocalNotificationService {
         onDelivered(request.copy(state = NotificationState.MOSTRATA, outcome = NotificationOutcome.MOSTRATA))
     }
 
-    override fun cancel(requestId: String) = Unit
+    override fun cancel(requestId: String) {
+        cancelled += requestId
+    }
 }
 
 class NotificationBrokerTest {
@@ -266,5 +269,28 @@ class NotificationBrokerTest {
         repeat(3) { brokerInstance.recordOutcome(r, NotificationOutcome.IGNORATA) }
 
         assertTrue(registry.shouldProposeAutoDisable("task.reminder"))
+    }
+
+    @Test
+    fun `cancel delegates to LocalNotificationService, never bypassed by a direct caller (NTF-001)`() {
+        val service = FakeLocalNotificationService()
+        val broker = broker(localService = service)
+
+        broker.cancel("r1")
+
+        assertEquals(listOf("r1"), service.cancelled)
+    }
+
+    @Test
+    fun `cancelling a quiet-hours-deferred request stops it from firing at wake time`() {
+        val service = FakeLocalNotificationService()
+        val broker = broker(localService = service)
+        val scheduledFor = Instant.parse("2026-01-02T05:00:00Z")
+
+        broker.request(request("r1", scheduledFor = scheduledFor), scheduledFor, zone)
+        broker.cancel("r1")
+        broker.processDeferred(Instant.parse("2026-01-02T08:00:00Z"), zone)
+
+        assertTrue(service.shown.isEmpty())
     }
 }

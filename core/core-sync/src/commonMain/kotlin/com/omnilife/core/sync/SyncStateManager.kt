@@ -25,6 +25,15 @@ public data class SyncState(
 )
 
 /**
+ * Handle returned by [SyncStateManager.observe]; cancels that one listener.
+ * Mirrors `core-eventbus`'s `Subscription` shape (same convention, no
+ * cross-module dependency added purely for this one type — TDR-34).
+ */
+public interface SyncStateSubscription {
+    public fun cancel()
+}
+
+/**
  * Single place every module can ask "what is sync doing right now" —
  * e.g. for a future status indicator UI this sprint does not build
  * (explicitly out of scope: "Non implementare: UI").
@@ -44,7 +53,22 @@ public interface SyncStateManager {
         pendingCount: Int,
     )
 
-    public fun observe(listener: (SyncState) -> Unit)
+    /**
+     * TDR-40: reflects a change in queue depth alone (e.g. a new local mutation just enqueued)
+     * without asserting anything happened to a sync attempt — never touches [SyncState.phase],
+     * [SyncState.lastSuccessfulSyncAt], or [SyncState.lastError]. [recordSuccess]/[recordError]
+     * remain the only way to report an actual sync round's outcome.
+     */
+    public fun updatePendingCount(pendingCount: Int)
+
+    /**
+     * Registers [listener] for every subsequent state change. Returns a
+     * [SyncStateSubscription]; callers MUST hold onto it and call
+     * [SyncStateSubscription.cancel] when their own lifetime ends (e.g. a
+     * ViewModel's `clear()`) — see TDR-34 for why this replaced the earlier
+     * unsubscribe-less signature.
+     */
+    public fun observe(listener: (SyncState) -> Unit): SyncStateSubscription
 }
 
 public class InMemorySyncStateManager : SyncStateManager {
@@ -80,8 +104,18 @@ public class InMemorySyncStateManager : SyncStateManager {
         notifyListeners()
     }
 
-    override fun observe(listener: (SyncState) -> Unit) {
+    override fun updatePendingCount(pendingCount: Int) {
+        state = state.copy(pendingCount = pendingCount)
+        notifyListeners()
+    }
+
+    override fun observe(listener: (SyncState) -> Unit): SyncStateSubscription {
         listeners.add(listener)
+        return object : SyncStateSubscription {
+            override fun cancel() {
+                listeners.remove(listener)
+            }
+        }
     }
 
     private fun notifyListeners() {

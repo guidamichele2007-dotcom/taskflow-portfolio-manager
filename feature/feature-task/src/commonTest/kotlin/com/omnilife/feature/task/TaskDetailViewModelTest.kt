@@ -26,7 +26,7 @@ class TaskDetailViewModelTest {
     ) = TaskDetailViewModel(
         taskId = taskId,
         repository = repository,
-        updateTaskFields = UpdateTaskFields(repository),
+        updateTaskFields = UpdateTaskFields(repository, InMemoryEventBus()),
         deleteTask = DeleteTask(repository, InMemoryEventBus()),
         addSubtask = AddSubtask(repository, newId = { "sub-generated" }),
         toggleSubtask = ToggleSubtask(repository),

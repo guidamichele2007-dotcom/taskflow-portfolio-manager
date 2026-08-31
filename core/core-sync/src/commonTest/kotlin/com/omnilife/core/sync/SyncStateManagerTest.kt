@@ -60,4 +60,57 @@ class SyncStateManagerTest {
 
         assertEquals(listOf(SyncPhase.SYNCING, SyncPhase.IDLE), phases)
     }
+
+    @Test
+    fun `cancelling the returned subscription stops further notifications`() {
+        val manager = InMemorySyncStateManager()
+        val phases = mutableListOf<SyncPhase>()
+        val subscription = manager.observe { phases.add(it.phase) }
+
+        manager.transitionTo(SyncPhase.SYNCING)
+        subscription.cancel()
+        manager.recordSuccess(Instant.fromEpochSeconds(1), pendingCount = 0)
+        manager.recordError("boom", pendingCount = 1)
+
+        assertEquals(listOf(SyncPhase.SYNCING), phases)
+    }
+
+    @Test
+    fun `updatePendingCount changes only the count, never the phase or error`() {
+        val manager = InMemorySyncStateManager()
+        manager.recordError("boom", pendingCount = 5)
+
+        manager.updatePendingCount(9)
+
+        val state = manager.current()
+        assertEquals(9, state.pendingCount)
+        assertEquals(SyncPhase.ERROR, state.phase)
+        assertEquals("boom", state.lastError)
+    }
+
+    @Test
+    fun `updatePendingCount notifies observers`() {
+        val manager = InMemorySyncStateManager()
+        val counts = mutableListOf<Int>()
+        manager.observe { counts.add(it.pendingCount) }
+
+        manager.updatePendingCount(3)
+
+        assertEquals(listOf(3), counts)
+    }
+
+    @Test
+    fun `cancelling one subscription leaves other observers of the same manager intact`() {
+        val manager = InMemorySyncStateManager()
+        val cancelledPhases = mutableListOf<SyncPhase>()
+        val survivingPhases = mutableListOf<SyncPhase>()
+        val subscription = manager.observe { cancelledPhases.add(it.phase) }
+        manager.observe { survivingPhases.add(it.phase) }
+
+        subscription.cancel()
+        manager.transitionTo(SyncPhase.SYNCING)
+
+        assertEquals(emptyList(), cancelledPhases)
+        assertEquals(listOf(SyncPhase.SYNCING), survivingPhases)
+    }
 }

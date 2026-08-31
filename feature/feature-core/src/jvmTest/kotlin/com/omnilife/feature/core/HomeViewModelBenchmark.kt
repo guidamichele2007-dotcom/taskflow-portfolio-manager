@@ -13,6 +13,7 @@ import com.omnilife.core.search.SearchFilter
 import com.omnilife.core.search.SearchResult
 import com.omnilife.core.search.UnifiedSearchService
 import com.omnilife.core.sync.InMemorySyncStateManager
+import com.omnilife.feature.core.onboarding.FakeTaskRepository
 import kotlin.system.measureNanoTime
 import kotlin.test.Test
 import kotlin.test.assertTrue
@@ -58,6 +59,8 @@ class HomeViewModelBenchmark {
                         ),
                     notificationHistoryStore = InMemoryNotificationHistoryStore(),
                     searchService = EmptySearchService(),
+                    taskRepository = FakeTaskRepository(),
+                    eventBus = InMemoryEventBus(),
                 )
             }
 

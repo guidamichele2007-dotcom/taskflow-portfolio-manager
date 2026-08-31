@@ -46,10 +46,22 @@ android {
 }
 
 dependencies {
-    // Bootstrap scope: depends only on :shared (the KMP export boundary),
-    // never directly on individual core/domain modules — see README-BUILD.md
-    // "Regole di dipendenza".
+    // TDR-37 (Sprint 5): androidApp depends on :shared PLUS the specific feature-* modules whose
+    // screens it actually renders — shared itself is unchanged (still only core-*/domain-*). The
+    // composition root (AppContainer.kt) also needs direct core-*/domain-* access to construct
+    // concrete repositories/bridges (TDR-19: manual DI, composition root knows everything).
     implementation(project(":shared"))
+    implementation(project(":feature:feature-core"))
+    implementation(project(":feature:feature-task"))
+    implementation(project(":feature:feature-search"))
+    implementation(project(":feature:feature-settings"))
+    implementation(project(":core:core-designsystem"))
+    implementation(project(":core:core-eventbus"))
+    implementation(project(":core:core-search"))
+    implementation(project(":core:core-sync"))
+    implementation(project(":core:core-notifications"))
+    implementation(project(":domain:domain-task"))
+    implementation(project(":domain:domain-account"))
 
     implementation(platform("androidx.compose:compose-bom:2024.09.00"))
     implementation("androidx.compose.ui:ui")

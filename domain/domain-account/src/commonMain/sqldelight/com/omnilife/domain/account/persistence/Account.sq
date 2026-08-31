@@ -1,0 +1,34 @@
+-- Schema + queries for the Settings/Onboarding slice of the Account module (DM-SYS-06).
+-- Full Account/Device/Subscription/RecoveryKeyMetadata entities are out of this sprint's scope
+-- (see domain-account/README.md) — only Setting + onboarding state are persisted here.
+
+CREATE TABLE settingEntity (
+    settingKey TEXT NOT NULL PRIMARY KEY,
+    settingValue TEXT NOT NULL,
+    scope TEXT NOT NULL,
+    modifiedAt TEXT NOT NULL
+);
+
+-- Single-row table: one local account per device in this sprint's scope, so onboarding state has
+-- no foreign key to an Account entity yet (see the same simplification domain-task's DatabaseDriverFactory
+-- README-BUILD.md §4 notes for single-account scope).
+CREATE TABLE onboardingStateEntity (
+    id INTEGER NOT NULL PRIMARY KEY,
+    completed INTEGER NOT NULL,
+    completedAt TEXT
+);
+
+insertOrReplaceSetting:
+INSERT OR REPLACE INTO settingEntity(settingKey, settingValue, scope, modifiedAt) VALUES (?, ?, ?, ?);
+
+selectSettingByKey:
+SELECT * FROM settingEntity WHERE settingKey = ?;
+
+selectAllSettings:
+SELECT * FROM settingEntity;
+
+insertOrReplaceOnboardingState:
+INSERT OR REPLACE INTO onboardingStateEntity(id, completed, completedAt) VALUES (0, ?, ?);
+
+selectOnboardingState:
+SELECT * FROM onboardingStateEntity WHERE id = 0;

@@ -18,6 +18,12 @@ import com.omnilife.core.search.SearchFilter
 import com.omnilife.core.search.SearchResult
 import com.omnilife.core.search.UnifiedSearchService
 import com.omnilife.core.sync.InMemorySyncStateManager
+import com.omnilife.domain.task.Task
+import com.omnilife.domain.task.usecase.CreateTask
+import com.omnilife.feature.core.onboarding.FakeTaskRepository
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.datetime.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -48,6 +54,17 @@ private class FakeSearchService(private val resultsByQuery: Map<String, List<Sea
     }
 }
 
+private fun testEnvelope(id: String) =
+    com.omnilife.core.common.Envelope(
+        id = id,
+        ownerAccountId = "account-1",
+        schemaVersion = 1,
+        createdAt = Instant.fromEpochMilliseconds(0),
+        createdByDevice = "device-1",
+        modifiedAt = Instant.fromEpochMilliseconds(0),
+        modifiedByDevice = "device-1",
+    )
+
 private fun testCategory() = NotificationCategory("home.test", "home")
 
 private fun testNotificationRequest(
@@ -64,25 +81,33 @@ private fun testNotificationRequest(
     state = state,
 )
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class HomeViewModelTest {
-    private fun newBroker(historyStore: InMemoryNotificationHistoryStore = InMemoryNotificationHistoryStore()) =
-        NotificationBroker(
-            categoryRegistry = InMemoryNotificationCategoryRegistry(),
-            historyStore = historyStore,
-            budget = NotificationBudget(),
-            digest = InMemoryNotificationDigest(),
-            localNotificationService = NoOpLocalNotificationService(),
-            eventBus = InMemoryEventBus(),
-        )
+    private fun newBroker(
+        historyStore: InMemoryNotificationHistoryStore = InMemoryNotificationHistoryStore(),
+        eventBus: com.omnilife.core.eventbus.EventBus = InMemoryEventBus(),
+    ) = NotificationBroker(
+        categoryRegistry = InMemoryNotificationCategoryRegistry(),
+        historyStore = historyStore,
+        budget = NotificationBudget(),
+        digest = InMemoryNotificationDigest(),
+        localNotificationService = NoOpLocalNotificationService(),
+        eventBus = eventBus,
+    )
 
     private fun newViewModel(
         historyStore: InMemoryNotificationHistoryStore = InMemoryNotificationHistoryStore(),
         searchService: UnifiedSearchService = FakeSearchService(),
+        taskRepository: FakeTaskRepository = FakeTaskRepository(),
+        eventBus: com.omnilife.core.eventbus.EventBus = InMemoryEventBus(),
     ) = HomeViewModel(
         syncStateManager = InMemorySyncStateManager(),
-        notificationBroker = newBroker(historyStore),
+        notificationBroker = newBroker(historyStore, eventBus),
         notificationHistoryStore = historyStore,
         searchService = searchService,
+        taskRepository = taskRepository,
+        eventBus = eventBus,
+        scope = CoroutineScope(UnconfinedTestDispatcher()),
     )
 
     @Test
@@ -157,6 +182,26 @@ class HomeViewModelTest {
     }
 
     @Test
+    fun `clear unsubscribes from SyncStateManager so further transitions do not update stale state`() {
+        val syncStateManager = com.omnilife.core.sync.InMemorySyncStateManager()
+        val viewModel =
+            HomeViewModel(
+                syncStateManager = syncStateManager,
+                notificationBroker = newBroker(),
+                notificationHistoryStore = InMemoryNotificationHistoryStore(),
+                searchService = FakeSearchService(),
+                taskRepository = FakeTaskRepository(),
+                eventBus = InMemoryEventBus(),
+                scope = CoroutineScope(UnconfinedTestDispatcher()),
+            )
+
+        viewModel.clear()
+        syncStateManager.transitionTo(com.omnilife.core.sync.SyncPhase.SYNCING)
+
+        assertEquals(com.omnilife.core.sync.SyncPhase.IDLE, viewModel.state.value.syncStatus?.phase)
+    }
+
+    @Test
     fun `ToggleNotificationCenter flips notificationCenterOpen`() {
         val viewModel = newViewModel()
         assertFalse(viewModel.state.value.notificationCenterOpen)
@@ -210,10 +255,73 @@ class HomeViewModelTest {
                 notificationBroker = newBroker(),
                 notificationHistoryStore = InMemoryNotificationHistoryStore(),
                 searchService = FakeSearchService(),
+                taskRepository = FakeTaskRepository(),
+                eventBus = InMemoryEventBus(),
+                scope = CoroutineScope(UnconfinedTestDispatcher()),
             )
 
         syncStateManager.transitionTo(com.omnilife.core.sync.SyncPhase.SYNCING)
 
         assertEquals(com.omnilife.core.sync.SyncPhase.SYNCING, viewModel.state.value.syncStatus?.phase)
+    }
+
+    @Test
+    fun `Today Overview shows a real task due today, not a placeholder`() {
+        val repository = FakeTaskRepository()
+        val today = kotlinx.datetime.Clock.System.todayIn(kotlinx.datetime.TimeZone.currentSystemDefault())
+        repository.tasks["t1"] =
+            Task(envelope = testEnvelope("t1"), title = "Chiamare il dentista", listId = "list-1", dueDate = today)
+        val viewModel = newViewModel(taskRepository = repository)
+
+        val section = viewModel.state.value.sections.getValue(HomeWidgetKind.TODAY_OVERVIEW)
+
+        assertTrue(section is HomeSectionState.Content)
+        assertEquals(listOf("Chiamare il dentista"), (section as HomeSectionState.Content).data.map { it.title })
+    }
+
+    @Test
+    fun `Today Overview with no tasks due today is a genuine Empty state, not fake content`() {
+        val viewModel = newViewModel()
+
+        val section = viewModel.state.value.sections.getValue(HomeWidgetKind.TODAY_OVERVIEW)
+
+        assertTrue(section is HomeSectionState.Empty)
+    }
+
+    @Test
+    fun `Recent Activity records a real task creation event with the task's real title`() =
+        kotlinx.coroutines.test.runTest {
+            val repository = FakeTaskRepository()
+            val eventBus = InMemoryEventBus()
+            val viewModel = newViewModel(taskRepository = repository, eventBus = eventBus)
+            val createTask = CreateTask(repository, eventBus, newId = { "t1" })
+
+            createTask("Comprare il pane", "list-1", "acc-1", "dev-1")
+
+            val section = viewModel.state.value.sections.getValue(HomeWidgetKind.RECENT_ACTIVITY)
+            assertTrue(section is HomeSectionState.Content)
+            assertTrue((section as HomeSectionState.Content).data.single().title.contains("Comprare il pane"))
+        }
+
+    @Test
+    fun `Recent Activity with no task events yet is a genuine Empty state`() {
+        val viewModel = newViewModel()
+
+        val section = viewModel.state.value.sections.getValue(HomeWidgetKind.RECENT_ACTIVITY)
+
+        assertTrue(section is HomeSectionState.Empty)
+    }
+
+    @Test
+    fun `Goal, Habit, Finance, and Calendar summaries remain functional placeholders, never fake data`() {
+        val viewModel = newViewModel()
+        val state = viewModel.state.value
+
+        listOf(
+            HomeWidgetKind.GOAL_SUMMARY,
+            HomeWidgetKind.HABIT_SUMMARY,
+            HomeWidgetKind.FINANCE_SUMMARY,
+            HomeWidgetKind.CALENDAR_SUMMARY,
+        ).forEach { kind -> assertTrue(state.sections.getValue(kind) is HomeSectionState.Empty) }
     }
 }

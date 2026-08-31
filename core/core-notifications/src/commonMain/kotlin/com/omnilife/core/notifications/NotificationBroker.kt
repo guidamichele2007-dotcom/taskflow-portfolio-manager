@@ -148,6 +148,17 @@ public class NotificationBroker(
         categoryRegistry.recordOutcome(request.category.id, outcome)
     }
 
+    /**
+     * TDR-39: cancels a still-pending request — the only path a module has to stop a notification
+     * it previously requested (NTF-001: never a direct call to [LocalNotificationService], always
+     * through this broker). A no-op if [requestId] already fired, was never scheduled, or is
+     * unknown — cancellation is best-effort, never an error a caller must handle.
+     */
+    public fun cancel(requestId: String) {
+        deferredForQuietHours.remove(requestId)
+        localNotificationService.cancel(requestId)
+    }
+
     private fun showNow(request: NotificationRequest) {
         val channelSpec = channelSpecFor(request.category, request.priority)
         localNotificationService.show(request, channelSpec) { delivered -> historyStore.record(delivered) }

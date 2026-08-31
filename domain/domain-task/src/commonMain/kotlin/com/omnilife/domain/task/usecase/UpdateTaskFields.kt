@@ -2,9 +2,11 @@ package com.omnilife.domain.task.usecase
 
 import com.omnilife.core.common.EntityId
 import com.omnilife.core.common.OmniResult
+import com.omnilife.core.eventbus.EventBus
 import com.omnilife.domain.task.RecurrenceRule
 import com.omnilife.domain.task.Task
 import com.omnilife.domain.task.TaskError
+import com.omnilife.domain.task.TaskEvent
 import com.omnilife.domain.task.TaskPriority
 import com.omnilife.domain.task.TaskRepository
 import kotlinx.datetime.Clock
@@ -37,7 +39,11 @@ private fun <T> Edit<T>.resolveNullable(current: T?): T? = if (this is Edit.Set)
 /** For fields never null on [Task] itself (title, priority) — an [Edit.Set] with a null value keeps [current]. */
 private fun <T> Edit<T>.resolve(current: T): T = if (this is Edit.Set) value ?: current else current
 
-public class UpdateTaskFields(private val repository: TaskRepository, private val clock: Clock = Clock.System) {
+public class UpdateTaskFields(
+    private val repository: TaskRepository,
+    private val eventBus: EventBus,
+    private val clock: Clock = Clock.System,
+) {
     public suspend operator fun invoke(
         taskId: EntityId,
         edits: TaskFieldEdits = TaskFieldEdits(),
@@ -47,6 +53,7 @@ public class UpdateTaskFields(private val repository: TaskRepository, private va
         val newTitle = edits.title.resolve(task.title)
         if (newTitle.isBlank()) return OmniResult.Failure(TaskError.MissingTitle)
 
+        val now = clock.now()
         val updated =
             task.copy(
                 title = newTitle,
@@ -55,9 +62,10 @@ public class UpdateTaskFields(private val repository: TaskRepository, private va
                 priority = edits.priority.resolve(task.priority),
                 recurrenceRule = edits.recurrenceRule.resolveNullable(task.recurrenceRule),
                 notes = edits.notes.resolveNullable(task.notes),
-                envelope = task.envelope.copy(modifiedAt = clock.now()),
+                envelope = task.envelope.copy(modifiedAt = now),
             )
         repository.updateTask(updated)
+        eventBus.publish(TaskEvent.Updated(taskId, now))
         return OmniResult.Success(updated)
     }
 }

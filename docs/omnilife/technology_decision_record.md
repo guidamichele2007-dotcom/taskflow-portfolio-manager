@@ -1083,6 +1083,229 @@
 
 ---
 
+## TDR-34 · `SyncStateManager.observe` senza unsubscribe (core-sync)
+
+> Nota: decisione presa durante lo Sprint 5 (Macro Sprint "MVP Vertical Slice"), correggendo un problema già individuato nel report dello Sprint 4 ("problemi trovati": `HomeViewModel.init` registra un listener su `InMemorySyncStateManager.observe` che non può mai essere rimosso — un leak strutturale ogni volta che un `HomeViewModel` viene creato e poi scartato, es. a ogni ricomposizione di un test o a ogni navigazione via e ritorno in un futuro composition root reale).
+
+**Decisione**: `SyncStateManager.observe(listener)` ora ritorna un `SyncStateSubscription` (`fun cancel()`), simmetrico a `core-eventbus`'s `Subscription` — ma un tipo proprio di `core-sync`, non lo stesso tipo importato, per non introdurre una dipendenza `core-sync → core-eventbus` solo per questo.
+
+| Alternativa | Descrizione | Esito |
+|---|---|---|
+| **A — `observe` ritorna un `SyncStateSubscription` proprio del modulo** | Stesso pattern già in uso in `core-eventbus.EventBus.subscribe`, zero dipendenze nuove | ✅ Scelta |
+| **B — Importare `com.omnilife.core.eventbus.Subscription` direttamente** | Riusa un tipo già esistente, ma costringe `core-sync` a dipendere da `core-eventbus` solo per un'interfaccia a un metodo — violazione non necessaria della Dependency Rule (Technical Architecture Bible §01 §4: i moduli Core non dipendono l'uno dall'altro se non esplicitamente previsto) | ❌ Scartata |
+| **C — `StateFlow<SyncState>` al posto del listener callback** | Più idiomatico Kotlin (cancellazione naturale via `collect` + `CoroutineScope`), ma è un cambio di firma pubblica più ampio di quanto il problema richieda, e `SyncStateManager` è usato anche da `BackgroundSyncCoordinator`/`SyncEngine` con un contratto sincrono — un refactor più grande, non giustificato solo dal leak | ❌ Scartata (per ora; possibile refactor futuro se emergono altri consumatori) |
+
+**Motivazione**: **B** risolverebbe il problema ma introdurrebbe un accoppiamento tra due moduli Core che oggi non hanno alcuna relazione — un costo architetturale sproporzionato rispetto al problema (un'interfaccia a un metodo). **C** è una soluzione più "corretta" a lungo termine ma cambia la forma dell'API pubblica di `SyncStateManager` ben oltre il fix minimo richiesto da questo sprint, e nessun consumatore reale la richiede ancora. **A** risolve esattamente e solo il problema documentato, mantenendo compatibilità di comportamento (stesso `(SyncState) -> Unit)` come parametro) e cambiando solo il tipo di ritorno.
+
+**Vantaggi**: `HomeViewModel.clear()` ora cancella davvero il listener; lo stesso pattern è immediatamente riutilizzabile da qualunque futuro consumatore di `SyncStateManager` (es. una futura `SettingsViewModel` che mostra lo stato di sync).
+
+**Svantaggi**: è un breaking change di firma per l'unico chiamante interno esistente (`HomeViewModel`) e per i test — entrambi aggiornati in questo stesso sprint.
+
+**Impatto sul progetto**: `InMemorySyncStateManager.observe` rimuove il listener dalla propria lista interna su `cancel()`; comportamento verificato da un test reale (non un mock di conteggio chiamate) che registra due listener, cancella uno, e verifica che l'altro continui a ricevere notifiche mentre quello cancellato no.
+
+**Rischi**: nessuno strutturale — la classe non è thread-safe per design (stesso vincolo già documentato per `InMemoryEventBus`), invariato da questa modifica.
+
+**Costo**: nessuno.
+
+**Facilità di manutenzione**: alta.
+
+**Scalabilità**: non applicabile (in-memory, singolo processo).
+
+**Compatibilità con le Bible**: piena — nessuna Bible impone una forma per questa API; il fix rispetta la Dependency Rule più strettamente di quanto facesse il problema originale.
+
+---
+
+## TDR-35 · `TaskEvent.Updated` per gli edit via `UpdateTaskFields` (domain-task)
+
+> Nota: decisione presa durante lo Sprint 5, individuata mentre si progettava il bridge Task↔Search richiesto dal Macro Sprint ("l'indice di ricerca deve restare coerente con... editing"). `UpdateTaskFields` (Sprint 1) non pubblicava alcun `TaskEvent` — un gap reale: senza un evento, nessun consumatore basato sull'Event Bus (Technical Architecture Bible §03) può sapere che un task è stato modificato.
+
+**Decisione**: `UpdateTaskFields` ora riceve un `EventBus` (stesso pattern di `CreateTask`/`CompleteTask`/`PostponeTask`/`DeleteTask`) e pubblica `TaskEvent.Updated(taskId, at)` dopo un salvataggio riuscito, mai dopo uno fallito.
+
+| Alternativa | Descrizione | Esito |
+|---|---|---|
+| **A — Nuovo `TaskEvent.Updated`, pubblicato da `UpdateTaskFields`** | Coerente con ogni altro use case di scrittura del modulo (tutti pubblicano già il proprio evento); payload minimo (id + timestamp), come richiesto dal Bus Eventi | ✅ Scelta |
+| **B — Il bridge Task↔Search interroga periodicamente (polling) invece di sottoscrivere eventi** | Eviterebbe di toccare `domain-task`, ma contraddice esplicitamente Technical Architecture Bible §13 (SRCH-AC-02: "indice aggiornato in transazione con le scritture — mai risultati fantasma o mancanti dopo una modifica") — il polling introduce necessariamente una finestra di ritardo | ❌ Scartata |
+| **C — Riusare `TaskEvent.Rescheduled` per ogni tipo di modifica, non solo la data** | Zero nuovo tipo, ma semanticamente falso (un edit del titolo non è un "reschedule") e comunque non pubblicato oggi da `UpdateTaskFields` | ❌ Scartata |
+
+**Motivazione**: **B** viola direttamente un criterio di accettazione già documentato (SRCH-AC-02). **C** confonde la semantica degli eventi esistenti per un consumatore che non li produce affatto. **A** è la soluzione minima e coerente con la convenzione già stabilita da ogni altro use case in questo stesso file (`CreateTask`, `CompleteTask`, `PostponeTask`, `DeleteTask` pubblicano già ciascuno il proprio evento).
+
+**Vantaggi**: chiude un gap reale con il minimo cambiamento di superficie; il bridge Task↔Search (e qualunque altro futuro consumatore) può ora sapere con certezza quando un task è stato modificato, senza indovinare da eventi con semantica diversa.
+
+**Svantaggi**: cambia la firma del costruttore di `UpdateTaskFields` — due soli call site esistenti (un test in `domain-task` e uno in `feature-task`), entrambi aggiornati in questo stesso sprint.
+
+**Impatto sul progetto**: verificato da due test comportamentali reali (non basati su verifica di chiamata) — un edit riuscito pubblica esattamente un `TaskEvent.Updated` con l'id corretto; un edit fallito (titolo vuoto) non pubblica nulla.
+
+**Rischi**: nessuno strutturale.
+
+**Costo**: nessuno.
+
+**Facilità di manutenzione**: alta — stesso pattern di ogni altro use case del modulo, nessuna eccezione da ricordare.
+
+**Scalabilità**: non applicabile (stesso meccanismo sincrono locale di ogni altro evento del modulo).
+
+**Compatibilità con le Bible**: piena — Functional Bible §6 (naming `modulo.entita.azione`), Technical Architecture Bible §03 §3 (payload minimo).
+
+---
+
+## TDR-36 · Stato di completamento onboarding fuori dal catalogo Setting (domain-account)
+
+> Nota: decisione presa durante lo Sprint 5, progettando la persistenza dell'onboarding richiesta dal Macro Sprint ("state persistence" dell'onboarding). Data Model Bible DM-SYS-06 non menziona alcun campo "onboarding completato", e SET-R-01 (Functional Bible §14 §4) impone che il catalogo delle impostazioni resti chiuso.
+
+**Decisione**: `OnboardingState` (completed, completedAt) è un tipo/tabella separato da `Setting`, non una voce aggiunta al catalogo SET §2.
+
+| Alternativa | Descrizione | Esito |
+|---|---|---|
+| **A — `OnboardingState` come entità propria, separata da `Setting`** | Rispetta letteralmente SET-R-01 ("nessuna nuova chiave senza passare i 7 cancelli della Feature Philosophy") — "l'onboarding è stato completato" non è una preferenza utente, è uno stato di ciclo di vita dell'account | ✅ Scelta |
+| **B — Aggiungere `SettingKey.ONBOARDING_COMPLETED` al catalogo** | Riuserebbe la stessa tabella/repository, ma tratterebbe uno stato di sistema come se fosse un'impostazione scelta dall'utente, e aggirerebbe SET-R-01 senza passare i cancelli della Feature Philosophy | ❌ Scartata |
+
+**Motivazione**: **B** è tecnicamente più semplice ma concettualmente scorretta — il catalogo SET §2 è esplicitamente "chiuso" per le impostazioni che l'utente sceglie; l'onboarding non è una scelta reversibile dell'utente nello stesso senso (è un flag "questo dispositivo/account ha già visto il flusso minimo"), e forzarlo nel catalogo comprometterebbe la garanzia SET-R-01 offre altrove. **A** mantiene la distinzione concettuale con una tabella separata nello stesso modulo (`domain-account`), riusando lo stesso `SettingsRepository`/schema SQLDelight per semplicità implementativa senza confondere i due concetti nel dominio.
+
+**Vantaggi**: SET-R-01 resta vero alla lettera; `GetSettings()` continua a restituire esattamente il catalogo dichiarato, mai un flag di sistema mescolato in mezzo.
+
+**Svantaggi**: una tabella in più nello schema SQLDelight (`onboardingStateEntity`), invece di riusare `settingEntity`.
+
+**Impatto sul progetto**: `SettingsRepository` espone `findOnboardingState`/`saveOnboardingState` accanto a `findSetting`/`upsertSetting` — stesso repository, contratti distinti.
+
+**Rischi**: nessuno strutturale.
+
+**Costo**: nessuno.
+
+**Facilità di manutenzione**: alta.
+
+**Scalabilità**: non applicabile.
+
+**Compatibilità con le Bible**: piena — rispetta SET-R-01 più strettamente dell'alternativa B.
+
+---
+
+## TDR-37 · Dipendenze di `androidApp`/`iosApp` oltre `shared` (app shell)
+
+> Nota: decisione presa durante lo Sprint 5, la prima volta che `androidApp` ha bisogno di costruire e mostrare schermate reali (Home, Task, Onboarding, Settings). README-BUILD.md §11 documentava (correttamente, all'epoca pre-UI) che `androidApp`/`iosApp` dipendono "solo da `shared`", e che `shared` aggrega solo moduli `core-*`/`domain-*`, mai `feature-*`/`platform-*`. Con `feature-*` che ora contiene ViewModel e schermate Compose reali (Sprint 4-5), questa regola non può più valere alla lettera: l'app deve poter costruire e mostrare quelle schermate.
+
+**Decisione**: `androidApp` (e, concettualmente, `iosApp` per le proprie viste SwiftUI equivalenti) dipende da `shared` **più** ciascun modulo `feature-*` di cui mostra effettivamente le schermate (`feature-core`, `feature-task`, `feature-search`, `feature-settings` in questo sprint) — mai l'inverso (nessun `feature-*` dipende da `androidApp`), e `shared` stesso resta invariato (continua ad aggregare solo `core-*`/`domain-*`, come da regola originaria).
+
+| Alternativa | Descrizione | Esito |
+|---|---|---|
+| **A — `androidApp` dipende da `shared` + i `feature-*` che effettivamente usa** | Minimo cambiamento coerente con la Dependency Rule (Technical Architecture Bible §01 §4: le dipendenze scorrono verso l'interno, mai a ritroso) — l'app shell è l'unico livello a cui è lecito dipendere da più `feature-*` contemporaneamente, essendo il punto di composizione finale | ✅ Scelta |
+| **B — Piegare `feature-*` dentro `shared`** | Manterrebbe letteralmente la regola originaria ("androidApp dipende solo da shared"), ma violerebbe la separazione L2/L1 che la stessa Bible impone altrove — `shared` diventerebbe un modulo che espone anche Compose UI, contraddicendo il motivo per cui `shared` esiste (dominio condiviso, non UI) | ❌ Scartata |
+| **C — Un modulo `app-composition` intermedio che aggrega tutti i `feature-*` e viene l'unica dipendenza di `androidApp`** | Isolerebbe la lista di `feature-*` in un solo posto, ma aggiunge un livello di indirection che nessun requisito attuale giustifica (un solo app shell Android in questo progetto, nessun secondo consumatore che ne beneficerebbe) | ❌ Scartata (per ora) |
+
+**Motivazione**: **B** contraddice la separazione L1 (dominio)/L2 (feature/orchestrazione) già stabilita altrove nella stessa Bible — mescolare Compose UI dentro `shared` renderebbe quel modulo non più "condiviso" nel senso in cui `iosApp` lo consuma oggi (solo dominio, mai UI Compose, TDR-01). **C** è prematura: un modulo di aggregazione ha senso quando esistono più punti di composizione che condividerebbero la stessa lista — oggi ce n'è uno solo (`androidApp`). **A** è il minimo cambiamento che permette all'app shell di fare il proprio lavoro (comporre e mostrare schermate reali) senza spostare alcuna responsabilità architetturale.
+
+**Vantaggi**: `shared` resta esattamente ciò che era (dominio puro, consumabile anche da `iosApp` senza mai portare con sé Compose); la Dependency Rule resta directional (nessun `feature-*` dipende mai da `androidApp`).
+
+**Svantaggi**: `androidApp/build.gradle.kts` deve elencare esplicitamente ogni `feature-*` che usa, e tenerlo aggiornato quando se ne aggiungono di nuovi — un costo di manutenzione minimo, lineare col numero di feature effettivamente mostrate.
+
+**Impatto sul progetto**: README-BUILD.md §11 va aggiornato per riflettere questa regola corretta (sostituendo "androidApp/iosApp dipendono solo da shared").
+
+**Rischi**: nessuno strutturale — nessun ciclo di dipendenza introdotto (verificabile: nessun modulo `feature-*` importa `androidApp`).
+
+**Costo**: nessuno.
+
+**Facilità di manutenzione**: alta.
+
+**Scalabilità**: adeguata al numero di moduli `feature-*` reali (dozzine, non migliaia).
+
+**Compatibilità con le Bible**: coerente con la Dependency Rule della Technical Architecture Bible; corregge un dettaglio di README-BUILD.md che la stessa Bible non impone alla lettera (era una convenzione interna dello Sprint 1, non un vincolo delle Bible).
+
+---
+
+## TDR-38 · Navigazione MVP scritta a mano (app shell)
+
+> Nota: decisione presa durante lo Sprint 5, implementando la navigazione reale a 4 tab richiesta dalla Navigation Bible (`02-navigation-bible.md`).
+
+**Decisione**: uno stack di navigazione scritto a mano (`AppDestination` sigillato + back stack per-tab in memoria), nessuna libreria di navigazione di terze parti (né Jetpack Navigation Compose, né Voyager/Decompose).
+
+| Alternativa | Descrizione | Esito |
+|---|---|---|
+| **A — Navigazione scritta a mano** | Coerente con la filosofia già stabilita in questo progetto (TDR-19 DI manuale, TDR-22 icone disegnate a mano, TDR-24 CRDT scritto a mano) — pochissimi stati (4 tab, back stack indipendente per tab, un livello di bottom sheet) non giustificano una dipendenza esterna | ✅ Scelta |
+| **B — Jetpack Navigation Compose** | Libreria ufficiale Android, ma pensata per un unico back stack condiviso — la Navigation Bible richiede esplicitamente back stack indipendenti per tab (§3), che Navigation Compose supporta solo con workaround non banali (nested graphs multipli) | ❌ Scartata |
+| **C — Libreria KMP cross-platform (es. Voyager/Decompose)** | Risolverebbe anche il lato iOS, ma iOS in questo progetto resta SwiftUI nativo (TDR-01) — una libreria di navigazione KMP non aiuterebbe comunque la metà SwiftUI, e aggiungerebbe una dipendenza esterna sostanziale per un problema (4 tab, back stack semplice) che non la richiede | ❌ Scartata |
+
+**Motivazione**: **B** risolverebbe solo Android e in modo non allineato al modello a back-stack-per-tab richiesto. **C** non risolverebbe iOS (che resta nativo per TDR-01) e introdurrebbe comunque una dipendenza sostanziale per un problema strutturalmente semplice. **A** prosegue la stessa linea già scelta ripetutamente in questo progetto: quando il problema è piccolo e ben definito, il controllo diretto batte la comodità di una libreria di terze parti — stesso principio del filo conduttore di TDR-01…18.
+
+**Vantaggi**: zero dipendenze nuove; comportamento (4 tab fissi, back stack indipendente, deep link con storia sintetica Home→destinazione) interamente sotto controllo e testabile su JVM come ogni altro `ViewModel` di questo progetto.
+
+**Svantaggi**: nessuna delle funzionalità avanzate di una libreria matura (animazioni di transizione predefinite, salvataggio automatico dello stato su process death) — accettabile per l'ampiezza di questo sprint (MVP Vertical Slice, non un'app matura).
+
+**Impatto sul progetto**: la navigazione vive in `feature-core`/`androidApp` come un `AppNavigator`/`AppUiState` testabile in isolamento, stesso pattern MVI di ogni altro ViewModel del progetto.
+
+**Rischi**: se la superficie di navigazione cresce molto (molti livelli di push, animazioni complesse), potrebbe giustificare in futuro una libreria — non un rischio per l'ampiezza attuale (4 tab, un bottom sheet).
+
+**Costo**: nessuno.
+
+**Facilità di manutenzione**: alta nel breve termine (poco codice, tutto leggibile); da rivalutare se la complessità di navigazione cresce sostanzialmente.
+
+**Scalabilità**: adeguata al numero di destinazioni reali di questo sprint (Home, Task List, Task Detail, Search, Settings, Onboarding).
+
+**Compatibilità con le Bible**: piena — implementa la Navigation Bible §3/§5 letteralmente (4 tab fissi, back stack per tab, bottom sheet come default per il dettaglio entità).
+
+---
+
+## TDR-39 · `NotificationBroker.cancel` (core-notifications)
+
+> Nota: decisione presa durante lo Sprint 5, progettando il bridge Task↔Notifiche. `NotificationBroker` (Sprint 3) esponeva `request`/`processDeferred`/`flushDigestIfDue`/`recordOutcome`, ma nessun modo per un modulo chiamante di annullare una notifica già pianificata — un gap reale: TASK-009 (postpone) e la cancellazione/completamento di un task richiedono di poter annullare il promemoria associato, non solo di poterne pianificare uno nuovo.
+
+**Decisione**: `NotificationBroker` guadagna un metodo pubblico `cancel(requestId)` che delega a `LocalNotificationService.cancel` (già esistente ma non raggiungibile dall'esterno del modulo) e registra l'esito nello storico (`NotificationState.IGNORATA`-adjacent: nessuno stato nuovo, la richiesta smette semplicemente di esistere come pianificata).
+
+| Alternativa | Descrizione | Esito |
+|---|---|---|
+| **A — `NotificationBroker.cancel(requestId)` pubblico** | Rispetta NTF-001 ("nessuna notifica diretta dai moduli" — vale anche per la cancellazione: passa dal broker, mai da un accesso diretto a `LocalNotificationService`) | ✅ Scelta |
+| **B — Esporre `LocalNotificationService` direttamente ai moduli chiamanti** | Bypasserebbe il broker, contraddicendo esattamente NTF-001 | ❌ Scartata |
+| **C — Nessuna cancellazione: il task/notifica scaduta si auto-risolve a runtime** | Più semplice, ma lascia una notifica per un task già completato/cancellato/riprogrammato — esperienza scorretta esplicitamente in conflitto con l'aspettativa naturale dell'utente | ❌ Scartata |
+
+**Motivazione**: **B** violerebbe il principio fondante del broker (NTF-001). **C** produrrebbe notifiche fantasma per task non più validi — un difetto reale, non accettabile per un Vertical Slice "genuinamente utilizzabile". **A** è l'estensione minima e coerente: la stessa autorità centrale che decide se/quando mostrare una notifica decide anche quando smettere di volerla mostrare.
+
+**Vantaggi**: il bridge Task↔Notifiche può annullare un promemoria su complete/delete/postpone senza aggirare il broker.
+
+**Svantaggi**: nessuno strutturale — estensione additiva, nessuna firma esistente cambia.
+
+**Impatto sul progetto**: `TaskNotificationBridge` (feature-task) chiama `notificationBroker.cancel(requestId)` quando un task con reminder viene completato, cancellato, o quando il suo reminder viene sostituito da un edit.
+
+**Rischi**: nessuno strutturale.
+
+**Costo**: nessuno.
+
+**Facilità di manutenzione**: alta.
+
+**Scalabilità**: non applicabile.
+
+**Compatibilità con le Bible**: piena — NTF-001 letteralmente.
+
+---
+
+## TDR-40 · `SyncStateManager.updatePendingCount` (core-sync)
+
+> Nota: decisione presa durante lo Sprint 5, progettando il bridge Task↔Outbox. `SyncStateManager` (Sprint 3) esponeva `pendingCount` solo come effetto collaterale di `recordSuccess`/`recordError` — cioè solo dopo un tentativo di sync vero e proprio. Un modulo che si limita a *mettere in coda* una modifica (senza tentare alcuna sincronizzazione) non aveva modo di aggiornare `pendingCount` senza affermare falsamente che un tentativo di sync fosse avvenuto.
+
+**Decisione**: nuovo metodo `updatePendingCount(pendingCount: Int)` che aggiorna solo quel campo, mai `phase`/`lastError`/`lastSuccessfulSyncAt`.
+
+| Alternativa | Descrizione | Esito |
+|---|---|---|
+| **A — `updatePendingCount` dedicato** | Aggiorna esattamente il campo che è realmente cambiato (la profondità della coda), senza toccare stato che non è cambiato | ✅ Scelta |
+| **B — Il bridge chiama `recordError`/`recordSuccess` con un messaggio fittizio per aggiornare `pendingCount`** | Funzionerebbe meccanicamente, ma affermerebbe un esito di sync (successo/errore) che non è mai avvenuto — esattamente il tipo di simulazione che questo sprint vieta esplicitamente ("Non simulare artificialmente una sync riuscita") | ❌ Scartata |
+| **C — `pendingCount` calcolato a runtime dalla UI leggendo `SyncOutboxStore.size()` direttamente, bypassando `SyncStateManager`** | Eviterebbe di toccare l'interfaccia, ma introdurrebbe una seconda fonte di verità per lo stato di sync (esattamente il problema che `SyncStateManager` esiste per risolvere, come da suo stesso commento "Single place every module can ask 'what is sync doing right now'") | ❌ Scartata |
+
+**Motivazione**: **B** violerebbe direttamente un vincolo esplicito di questo stesso sprint. **C** ricreerebbe la doppia fonte di verità che `SyncStateManager` è stato introdotto per eliminare nello Sprint 3. **A** è l'estensione minima e onesta: la profondità della coda e l'esito dell'ultimo tentativo di sync sono due fatti indipendenti, e ora hanno ciascuno il proprio percorso di aggiornamento.
+
+**Vantaggi**: Home può mostrare "3 modifiche in attesa" nel momento stesso in cui vengono messe in coda, non solo dopo il prossimo tentativo di sync (che in questo sandbox, senza un backend raggiungibile, potrebbe non avvenire mai con esito positivo).
+
+**Svantaggi**: nessuno strutturale — estensione additiva.
+
+**Impatto sul progetto**: `TaskSyncOutboxBridge` (feature-task) chiama `updatePendingCount(outboxStore.size())` dopo ogni `enqueue`.
+
+**Rischi**: nessuno strutturale.
+
+**Costo**: nessuno.
+
+**Facilità di manutenzione**: alta.
+
+**Scalabilità**: non applicabile.
+
+**Compatibilità con le Bible**: piena — Technical Architecture Bible §05 (stato di sync osservabile, unica fonte di verità).
+
+---
+
 ## Tabella Finale — Decisioni Tecnologiche Approvate
 
 | ID | Area | Decisione approvata |
@@ -1120,8 +1343,15 @@
 | TDR-31 | Retry Logic indipendente da core-sync (core-notifications) | `NotificationRetryEngine` proprio (2s→5min, max 5 tentativi) — nessuna dipendenza da `core-sync`'s `RetryEngine`, per restare un modulo autonomo |
 | TDR-32 | Formato dell'URI dei deep link (core-notifications) | Schema custom `omnilife://<tipo>/<id>`; Universal Links/App Links rinviati (richiedono infrastruttura web fuori perimetro) |
 | TDR-33 | Mappatura categoria/priorità → canale di notifica (core-notifications) | Un canale Android per categoria, importanza derivata dalla priorità NTF-002 — allinea la granularità di sistema a quella NTF-007 |
+| TDR-34 | `SyncStateManager.observe` senza unsubscribe (core-sync) | `observe` ritorna un `SyncStateSubscription` proprio del modulo (`fun cancel()`) — corregge il leak documentato nel report Sprint 4 |
+| TDR-35 | `TaskEvent.Updated` per gli edit (domain-task) | `UpdateTaskFields` riceve `EventBus` e pubblica `TaskEvent.Updated` dopo un salvataggio riuscito — chiude il gap che impediva al bridge Task↔Search di reagire agli edit |
+| TDR-36 | Stato onboarding fuori dal catalogo Setting (domain-account) | `OnboardingState` è un'entità propria, separata da `Setting` — SET-R-01 resta chiuso alla lettera |
+| TDR-37 | Dipendenze di `androidApp`/`iosApp` oltre `shared` (app shell) | `androidApp` dipende da `shared` + i `feature-*` che effettivamente mostra; `shared` resta solo `core-*`/`domain-*` |
+| TDR-38 | Navigazione MVP scritta a mano (app shell) | `AppDestination` sigillato + back stack per-tab in memoria — nessuna libreria di navigazione di terze parti, coerente con TDR-19/22/24 |
+| TDR-39 | `NotificationBroker.cancel` (core-notifications) | Cancellazione pubblica via broker (mai un accesso diretto a `LocalNotificationService`) — NTF-001 vale anche per l'annullamento |
+| TDR-40 | `SyncStateManager.updatePendingCount` (core-sync) | Aggiorna solo `pendingCount`, mai `phase`/`lastError` — evita di simulare un esito di sync mai avvenuto |
 
-**Nota sulle voci TDR-19…33**: a differenza di TDR-01…18 (decise tutte insieme, prima di ogni riga di codice), queste voci sono state aggiunte durante gli sprint di sviluppo reale (TDR-19…21 nello Sprint 1, TDR-22 nello Sprint 2, TDR-23…33 nello Sprint 3 — incluso lo Scope Change D-12 che ha reintrodotto le notifiche a metà sprint) quando l'implementazione ha incontrato una decisione tecnica non coperta dalle Bible esistenti. Seguono lo stesso metodo (≥3 alternative, motivazione contro la documentazione esistente) e la stessa autorità delle prime 18.
+**Nota sulle voci TDR-19…40**: a differenza di TDR-01…18 (decise tutte insieme, prima di ogni riga di codice), queste voci sono state aggiunte durante gli sprint di sviluppo reale (TDR-19…21 nello Sprint 1, TDR-22 nello Sprint 2, TDR-23…33 nello Sprint 3 — incluso lo Scope Change D-12 che ha reintrodotto le notifiche a metà sprint —, TDR-34…40 nello Sprint 5, il Macro Sprint "MVP Vertical Slice") quando l'implementazione ha incontrato una decisione tecnica non coperta dalle Bible esistenti. Seguono lo stesso metodo (≥3 alternative, motivazione contro la documentazione esistente) e la stessa autorità delle prime 18.
 
 **Filo conduttore delle 18 decisioni originarie**: ovunque esistesse una scelta tra (a) controllo diretto/open-source/portabile e (b) comodità tramite un fornitore proprietario di terze parti, è stata preferita (a) — coerenza diretta con l'indipendenza tecnologica ed economica già rivendicata in tutta la documentazione precedente (Product Constitution, Business Strategy, Technical Architecture Bible). Nessuna decisione introduce un fornitore con visibilità sui contenuti utente; ogni decisione è stata verificata contro almeno una Bible esistente e non ne contraddice alcuna.
 

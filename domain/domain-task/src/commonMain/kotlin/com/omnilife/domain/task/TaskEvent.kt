@@ -23,6 +23,15 @@ public sealed interface TaskEvent : DomainEvent {
 
     public data class Uncompleted(val taskId: EntityId, val at: Instant) : TaskEvent
 
+    /**
+     * `task.item.updated` (TDR-35): a field edit via [com.omnilife.domain.task.usecase.UpdateTaskFields].
+     * Added this sprint — the use case previously published nothing, which left consumers that
+     * must stay consistent with edits (the search index bridge, in particular) with no signal.
+     * Deliberately as minimal as every other event here: just enough for a subscriber to know it
+     * must re-read the task, never the edited fields themselves.
+     */
+    public data class Updated(val taskId: EntityId, val at: Instant) : TaskEvent
+
     public data class Rescheduled(val taskId: EntityId, val at: Instant, val newDueDate: LocalDate?) : TaskEvent
 
     public data class Deleted(val taskId: EntityId, val at: Instant) : TaskEvent
