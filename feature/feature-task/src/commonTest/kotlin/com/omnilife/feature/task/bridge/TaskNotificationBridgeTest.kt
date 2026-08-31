@@ -294,4 +294,65 @@ class TaskNotificationBridgeTest {
 
             assertTrue(localService.scheduled.isEmpty())
         }
+
+    @Test
+    fun `reconcileAll (MVP Release 1_0 reboot-survival fix) re-schedules every active task's reminder`() =
+        runTest {
+            val repository = FakeTaskRepository()
+            val eventBus = InMemoryEventBus()
+            val localService = RecordingLocalNotificationService()
+            val scope = CoroutineScope(UnconfinedTestDispatcher())
+            val bridge = newBridge(repository, eventBus, localService, scope)
+            val createTask = CreateTask(repository, eventBus, newId = { "task-1" }, clock = FixedClock(now))
+            createTask(
+                "Call the dentist",
+                listId = "list-1",
+                ownerAccountId = "acc-1",
+                deviceId = "dev-1",
+                details =
+                    NewTaskDetails(
+                        dueDate = LocalDate(2026, 1, 2),
+                        dueTime = LocalTime(9, 0),
+                        reminderConfig = ReminderConfig(leadMinutesBeforeDue = 30),
+                    ),
+            )
+            // Simulates AlarmManager having forgotten the alarm across a reboot: nothing to cancel
+            // is asserted here, only that reconcileAll independently re-derives and re-schedules it.
+            localService.scheduled.clear()
+
+            bridge.reconcileAll()
+
+            assertEquals(listOf("task-1"), localService.scheduled.map { it.id })
+            assertEquals(Instant.parse("2026-01-02T08:30:00Z"), localService.scheduled.single().scheduledFor)
+        }
+
+    @Test
+    fun `reconcileAll never re-schedules a completed task's reminder`() =
+        runTest {
+            val repository = FakeTaskRepository()
+            val eventBus = InMemoryEventBus()
+            val localService = RecordingLocalNotificationService()
+            val scope = CoroutineScope(UnconfinedTestDispatcher())
+            val bridge = newBridge(repository, eventBus, localService, scope)
+            val createTask = CreateTask(repository, eventBus, newId = { "task-1" }, clock = FixedClock(now))
+            createTask(
+                "Call the dentist",
+                listId = "list-1",
+                ownerAccountId = "acc-1",
+                deviceId = "dev-1",
+                details =
+                    NewTaskDetails(
+                        dueDate = LocalDate(2026, 1, 2),
+                        dueTime = LocalTime(9, 0),
+                        reminderConfig = ReminderConfig(),
+                    ),
+            )
+            val completeTask = CompleteTask(repository, eventBus, newId = { "task-2" }, clock = FixedClock(now))
+            completeTask("task-1")
+            localService.scheduled.clear()
+
+            bridge.reconcileAll()
+
+            assertTrue(localService.scheduled.isEmpty())
+        }
 }
