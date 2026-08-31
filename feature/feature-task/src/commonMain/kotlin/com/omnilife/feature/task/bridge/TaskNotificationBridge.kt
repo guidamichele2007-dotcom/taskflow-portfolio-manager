@@ -11,6 +11,7 @@ import com.omnilife.core.notifications.NotificationCategory
 import com.omnilife.core.notifications.NotificationPriority
 import com.omnilife.core.notifications.NotificationRequest
 import com.omnilife.domain.task.TaskEvent
+import com.omnilife.domain.task.TaskFilter
 import com.omnilife.domain.task.TaskRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -60,40 +61,55 @@ public class TaskNotificationBridge(
             eventBus.subscribe<TaskEvent.Deleted> { cancelReminder(it.taskId) },
         )
 
+    /** Fire-and-forget wrapper around [reconcileSuspend] for the event-subscription path. */
+    private fun reconcile(taskId: EntityId) {
+        scope.launch { reconcileSuspend(taskId) }
+    }
+
     /**
      * Re-derives whether [taskId] should have a scheduled reminder right now, and makes the
      * broker's state match — always cancels first (idempotent no-op if nothing was scheduled),
      * then re-requests only if every precondition still holds (TDR-39).
      */
-    private fun reconcile(taskId: EntityId) {
-        scope.launch {
-            notificationBroker.cancel(taskId)
-            val task = repository.findTaskById(taskId) ?: return@launch
-            if (task.completed) return@launch
-            val reminderConfig = task.reminderConfig ?: return@launch
-            val dueDate = task.dueDate ?: return@launch
-            val dueTime = task.dueTime ?: return@launch
+    private suspend fun reconcileSuspend(taskId: EntityId) {
+        notificationBroker.cancel(taskId)
+        val task = repository.findTaskById(taskId) ?: return
+        if (task.completed) return
+        val reminderConfig = task.reminderConfig ?: return
+        val dueDate = task.dueDate ?: return
+        val dueTime = task.dueTime ?: return
 
-            val dueInstant = LocalDateTime(dueDate, dueTime).toInstant(zone)
-            val leadMillis = reminderConfig.leadMinutesBeforeDue * MILLIS_PER_MINUTE
-            val scheduledFor = Instant.fromEpochMilliseconds(dueInstant.toEpochMilliseconds() - leadMillis)
-            val reference = EntityReference(taskId, TASK_ENTITY_TYPE)
+        val dueInstant = LocalDateTime(dueDate, dueTime).toInstant(zone)
+        val leadMillis = reminderConfig.leadMinutesBeforeDue * MILLIS_PER_MINUTE
+        val scheduledFor = Instant.fromEpochMilliseconds(dueInstant.toEpochMilliseconds() - leadMillis)
+        val reference = EntityReference(taskId, TASK_ENTITY_TYPE)
 
-            notificationBroker.request(
-                NotificationRequest(
-                    id = taskId,
-                    category = TASK_REMINDER_CATEGORY,
-                    priority = NotificationPriority.PROMEMORIA_UTENTE,
-                    entityReference = reference,
-                    title = task.title,
-                    body = REMINDER_BODY,
-                    scheduledFor = scheduledFor,
-                    deepLink = DeepLinkResolver.buildDeepLink(reference),
-                ),
-                now = clock.now(),
-                zone = zone,
-            )
-        }
+        notificationBroker.request(
+            NotificationRequest(
+                id = taskId,
+                category = TASK_REMINDER_CATEGORY,
+                priority = NotificationPriority.PROMEMORIA_UTENTE,
+                entityReference = reference,
+                title = task.title,
+                body = REMINDER_BODY,
+                scheduledFor = scheduledFor,
+                deepLink = DeepLinkResolver.buildDeepLink(reference),
+            ),
+            now = clock.now(),
+            zone = zone,
+        )
+    }
+
+    /**
+     * MVP Release 1.0: `AlarmManager` clears every pending alarm on device reboot — Android's own
+     * documented behavior, not a bug in this app — so every scheduled reminder would silently
+     * vanish the moment the user restarts their phone unless something re-derives and
+     * re-schedules them. Meant to be called once, at boot, for every still-active task (an
+     * app-shell `BroadcastReceiver` for `ACTION_BOOT_COMPLETED` is the real caller — out of this
+     * module, which has no platform/manifest knowledge).
+     */
+    public suspend fun reconcileAll() {
+        repository.findTasks(TaskFilter()).forEach { reconcileSuspend(it.envelope.id) }
     }
 
     private fun cancelReminder(taskId: EntityId) {

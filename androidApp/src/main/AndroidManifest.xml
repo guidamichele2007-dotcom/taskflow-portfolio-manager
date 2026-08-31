@@ -9,14 +9,22 @@
          requested so the common case gets exact timing). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <!-- MVP Release 1.0: required for BootCompletedReceiver to re-schedule reminders after a
+         reboot — AlarmManager clears every pending alarm when the device restarts. -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <application
         android:name=".OmniLifeApplication"
-        android:label="OmniLife"
+        android:label="@string/app_name"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:theme="@style/Theme.OmniLife"
         android:allowBackup="false">
 
         <activity
             android:name=".MainActivity"
+            android:theme="@style/Theme.OmniLife.Starting"
+            android:launchMode="singleTask"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -33,6 +41,18 @@
             android:exported="false">
             <intent-filter>
                 <action android:name="com.omnilife.core.notifications.ACTION_FIRE" />
+            </intent-filter>
+        </receiver>
+
+        <!-- MVP Release 1.0: must be exported — BOOT_COMPLETED is broadcast by the system, a
+             different UID than this app, so the system can only deliver it to an exported
+             receiver. The action itself is a protected system broadcast; the receiver only reads
+             this app's own already-persisted data, nothing untrusted crosses this boundary. -->
+        <receiver
+            android:name=".BootCompletedReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
             </intent-filter>
         </receiver>
     </application>

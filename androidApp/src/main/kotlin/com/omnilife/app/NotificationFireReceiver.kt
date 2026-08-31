@@ -49,11 +49,13 @@ public class NotificationFireReceiver : BroadcastReceiver() {
     }
 
     /**
-     * Deep link back into [MainActivity] on tap (NTF §... "azionata" outcome path). The deep link
-     * itself (which task to open) is not yet wired end-to-end — `MainActivity` has no intent-based
-     * navigation entry point (only its own in-memory tab/overlay state) — so this opens the app at
-     * its normal start screen rather than the specific task. Documented as a residual gap, not
-     * hidden: see `sprint6_report.md` §7.
+     * Deep link back into [MainActivity] on tap (NTF §... "azionata" outcome path). MVP Release
+     * 1.0: now opens the specific task's Detail sheet, not just the app generically — `requestId`
+     * doubles as the task id (`TaskNotificationBridge`'s own design: one reminder per task, keyed
+     * by the task's id), passed as [MainActivity.EXTRA_OPEN_TASK_ID] and consumed by
+     * `MainActivity`/`AppShell`. `singleTask` launch mode (manifest) + `FLAG_ACTIVITY_CLEAR_TOP`
+     * ensure this re-delivers into the already-running Activity via `onNewIntent` instead of
+     * spawning a second instance when the app is already open.
      */
     private fun contentIntentFor(
         context: Context,
@@ -62,6 +64,7 @@ public class NotificationFireReceiver : BroadcastReceiver() {
         val activityIntent =
             Intent(context, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                putExtra(MainActivity.EXTRA_OPEN_TASK_ID, requestId)
             }
         return PendingIntent.getActivity(
             context,

@@ -119,4 +119,7 @@ dependencies {
     // NotificationCompat/NotificationManagerCompat — same androidx.core version core-notifications
     // already depends on for ContextCompat, kept in sync rather than left to transitive resolution.
     implementation("androidx.core:core-ktx:1.13.1")
+    // MVP Release 1.0: system splash screen (Fase 10) — the compat artifact so behavior is
+    // consistent back to minSdk 26, not just API 31+'s native SplashScreen.
+    implementation("androidx.core:core-splashscreen:1.0.1")
 }

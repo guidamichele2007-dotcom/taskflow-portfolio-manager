@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- MVP Release 1.0: a plain checkmark — task management is the app's actual MVP core (this
+     release's entire vertical slice), not an invented symbol. Kept inside the adaptive-icon safe
+     zone (roughly x/y 18-90 of the 108dp canvas) so it isn't clipped by round/squircle/other OEM
+     icon masks. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="10"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="#00000000"
+        android:pathData="M30,58 L48,76 L80,40" />
+</vector>

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- MVP Release 1.0: the app is entirely Compose-driven (OmniTheme owns real theming) — this
+         base theme only needs to exist as a valid postSplashScreenTheme target, a plain platform
+         theme, no Material Components/AppCompat dependency added just for it. -->
+    <style name="Theme.OmniLife" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@android:color/white</item>
+    </style>
+
+    <!-- androidx.core.splashscreen compat theme (works back to minSdk 26, not just API 31+'s
+         native SplashScreen). windowSplashScreenBackground matches ic_launcher_background so the
+         transition into the app doesn't visibly "pop". -->
+    <style name="Theme.OmniLife.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">#2255A4</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
+        <item name="postSplashScreenTheme">@style/Theme.OmniLife</item>
+    </style>
+</resources>

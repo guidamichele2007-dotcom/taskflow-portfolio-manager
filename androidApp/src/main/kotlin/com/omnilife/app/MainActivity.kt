@@ -1,5 +1,6 @@
 package com.omnilife.app
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -10,12 +11,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import com.omnilife.core.designsystem.components.OmniBottomBar
 import com.omnilife.core.designsystem.components.OmniLoadingState
 import com.omnilife.core.designsystem.components.OmniTabBarItem
@@ -61,13 +64,56 @@ import com.omnilife.feature.task.TaskListViewModel
  *   branch — the old code destroyed and recreated them (losing search text, scroll position, and
  *   re-fetching Home) every time the user switched bottom tabs.
  *
+ * **MVP Release 1.0**: the async startup gate now shows the system splash screen
+ * (`androidx.core.splashscreen`, `res/values/styles.xml`'s `Theme.OmniLife.Starting`) instead of a
+ * bare white flash before [OmniLoadingState] — `installSplashScreen()` is held on screen via
+ * `setKeepOnScreenCondition` until [loadStartupSnapshot] resolves. A real launcher/adaptive icon
+ * now exists too (`res/mipmap-anydpi-v26/`), replacing the generic system icon the app installed
+ * with before.
+ *
  * **Not compiled/verified in this sandbox** — see `README.md`'s note (no Android SDK here).
  */
 public class MainActivity : ComponentActivity() {
+    // Compose-observable but mutated from plain Activity callbacks (onCreate/onNewIntent) — a
+    // legitimate escape hatch for exactly this "external event feeds Compose state" case; safe
+    // because both callbacks run on the main thread, same as any recomposition trigger.
+    private val pendingDeepLinkTaskId: MutableState<String?> = mutableStateOf(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
+        // installSplashScreen() must run before super.onCreate() (androidx.core.splashscreen
+        // contract) — MVP Release 1.0, Fase 10. Held on screen until the same async startup gate
+        // Sprint 6 already built (loadStartupSnapshot) finishes, so the splash covers exactly the
+        // window that used to show OmniLoadingState instead of a system-native transition.
+        val splashScreen = installSplashScreen()
         super.onCreate(savedInstanceState)
+        var keepSplashOnScreen = true
+        splashScreen.setKeepOnScreenCondition { keepSplashOnScreen }
+        pendingDeepLinkTaskId.value = intent.getStringExtra(EXTRA_OPEN_TASK_ID)
         val container = (application as OmniLifeApplication).container
-        setContent { OmniLifeApp(container) }
+        setContent {
+            OmniLifeApp(
+                container = container,
+                onReady = { keepSplashOnScreen = false },
+                pendingDeepLinkTaskId = pendingDeepLinkTaskId,
+            )
+        }
+    }
+
+    /**
+     * MVP Release 1.0: `NotificationFireReceiver`'s `PendingIntent` targets this Activity with
+     * `FLAG_ACTIVITY_CLEAR_TOP` (and `singleTask` launch mode, manifest) precisely so tapping a
+     * notification while the app is already running re-delivers here instead of creating a
+     * second instance — without overriding this, the deep link would be silently dropped whenever
+     * the app wasn't freshly cold-started.
+     */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        pendingDeepLinkTaskId.value = intent.getStringExtra(EXTRA_OPEN_TASK_ID)
+    }
+
+    public companion object {
+        /** Matches `NotificationFireReceiver.EXTRA_OPEN_TASK_ID` — see that file's doc comment. */
+        public const val EXTRA_OPEN_TASK_ID: String = "openTaskId"
     }
 }
 
@@ -98,9 +144,16 @@ private fun resolveDarkTheme(mode: ThemeMode): Boolean =
     }
 
 @Composable
-private fun OmniLifeApp(container: AppContainer) {
+private fun OmniLifeApp(
+    container: AppContainer,
+    pendingDeepLinkTaskId: MutableState<String?>,
+    onReady: () -> Unit = {},
+) {
     var startup by remember { mutableStateOf<StartupSnapshot?>(null) }
-    LaunchedEffect(Unit) { startup = loadStartupSnapshot(container) }
+    LaunchedEffect(Unit) {
+        startup = loadStartupSnapshot(container)
+        onReady()
+    }
 
     val snapshot = startup
     if (snapshot == null) {
@@ -133,7 +186,11 @@ private fun OmniLifeApp(container: AppContainer) {
                 onCompleted = { onboardingCompleted = true },
             )
         } else {
-            AppShell(container = container, defaultListId = snapshot.defaultListId)
+            AppShell(
+                container = container,
+                defaultListId = snapshot.defaultListId,
+                pendingDeepLinkTaskId = pendingDeepLinkTaskId,
+            )
         }
     }
 }
@@ -164,10 +221,20 @@ private fun OnboardingHost(
 private fun AppShell(
     container: AppContainer,
     defaultListId: String,
+    pendingDeepLinkTaskId: MutableState<String?>,
 ) {
     var selectedTab by remember { mutableStateOf(AppTab.OGGI) }
     var openTaskId by remember { mutableStateOf<String?>(null) }
     var creatingTask by remember { mutableStateOf(false) }
+
+    // MVP Release 1.0: tapping a task-reminder notification now opens that task's Detail sheet
+    // directly instead of just the app generically (NotificationFireReceiver/MainActivity).
+    // Consumes and clears the source state so it doesn't re-trigger on an unrelated recomposition.
+    LaunchedEffect(pendingDeepLinkTaskId.value) {
+        val deepLinkTaskId = pendingDeepLinkTaskId.value ?: return@LaunchedEffect
+        openTaskId = deepLinkTaskId
+        pendingDeepLinkTaskId.value = null
+    }
 
     // Sprint 6: created once here (not inside AppTabContent's `when` branch), so switching tabs
     // no longer destroys and rebuilds each ViewModel — see class doc.

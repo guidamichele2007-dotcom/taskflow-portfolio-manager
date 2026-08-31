@@ -155,7 +155,11 @@ public class AppContainer(context: Context) {
     public val appScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     private val searchIndexBridge = TaskSearchIndexBridge(taskRepository, searchIndexer, eventBus, appScope)
-    private val notificationBridge = TaskNotificationBridge(taskRepository, notificationBroker, eventBus, appScope)
+
+    // Public (not private, unlike its siblings): BootCompletedReceiver calls reconcileAll() on it
+    // directly (MVP Release 1.0) — no other bridge needs an entry point from outside this class.
+    public val notificationBridge: TaskNotificationBridge =
+        TaskNotificationBridge(taskRepository, notificationBroker, eventBus, appScope)
     private val syncOutboxBridge =
         TaskSyncOutboxBridge(
             repository = taskRepository,
