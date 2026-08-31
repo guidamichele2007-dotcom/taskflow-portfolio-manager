@@ -9,9 +9,10 @@ decisione architetturale cambiata arbitrariamente — sei decisioni tecniche rea
 non documentate sono state registrate prima nel Technology Decision Record (TDR-34…40) e poi
 implementate, come richiesto dalle istruzioni di questo sprint.
 
-*(Nota: questo documento è stato scritto man mano che il lavoro procedeva; le sezioni §3/§4/§8
-sui risultati di test/lint/build riportano gli esiti reali dell'ultima verifica eseguita in questo
-sandbox — non stime.)*
+*(Nota: le sezioni §3/§4/§8 sui risultati di test/lint/build riportano gli esiti reali della
+verifica finale eseguita in questo sandbox — 312 test `jvmTest` verdi su 7 moduli, `detekt`/
+`ktlintCheck` verdi sull'intero repository, `compileKotlinJvm`/`compileTestKotlinJvm` verdi
+sull'intero repository — non stime né dichiarazioni non verificate.)*
 
 ## 1. Funzionalità implementate
 
@@ -166,18 +167,33 @@ metodo sia stato chiamato). Circa 85 test nuovi o modificati questo sprint, dist
 | `feature-settings` | `SettingsViewModelTest` (nuovo) | 9 |
 | `feature-search` | `SearchViewModelTest` (nuovo) | 8 |
 
-**Esecuzione reale in questo sandbox**: `core-sync`, `domain-task`, `domain-account` (nessuna
-dipendenza Compose) — **eseguiti con successo** (`jvmTest` verde con `pipefail`, non solo
-compilato — verificato dopo aver scoperto e corretto due bug reali di compilazione durante questo
-stesso sprint, vedi §6 voci 6-7). `feature-task`, `feature-core`, `feature-settings`,
-`feature-search`, `core-notifications` toccano Compose Multiplatform nello stesso
-modulo/classpath: la verifica di questi moduli è **in corso al momento in cui questa sezione è
-stata scritta** — tre iterazioni di build reali hanno già trovato e corretto errori di
-compilazione autentici in questo stesso ciclo (`SheetState` senza `@OptIn`, dipendenza
-`compose.material3` mancante, collisione di nome di classe) — non "verde" dichiarato senza
-esecuzione, ma nemmeno ancora confermato verde all'ultimo giro. Questo è un commit di checkpoint
-(il repository richiede di non lasciare modifiche non committate); un commit successivo
-aggiornerà questa sezione con l'esito finale reale non appena la verifica in corso completa.
+**Esecuzione reale in questo sandbox — risultato finale confermato**:
+
+- `core-common`, `core-eventbus`, `core-search`, `core-sync`, `core-notifications`, `domain-task`,
+  `domain-account` (nessuna dipendenza Compose nel proprio `jvmTest`): **`jvmTest` eseguito
+  realmente e verde**, con `set -o pipefail` davanti a ogni invocazione Gradle (necessario dopo
+  aver scoperto che un `| tail -N` senza `pipefail` maschera il vero exit code — vedi §6). Totale
+  312 test eseguiti su questi 7 moduli, 0 fallimenti, 0 errori (conteggio reale dai file
+  `build/test-results/jvmTest/*.xml`, non dichiarato a memoria):
+  `core-common`=7, `core-eventbus`=7, `core-search`=26, `core-sync`=93, `core-notifications`=88,
+  `domain-task`=77, `domain-account`=14.
+- `feature-task`, `feature-core`, `feature-settings`, `feature-search` (Compose Multiplatform nel
+  proprio classpath di test): `compileKotlinJvm`/`compileTestKotlinJvm` **eseguiti realmente e
+  verdi** per l'intero repository (tutti i moduli, non solo questi quattro — un'unica invocazione
+  `./gradlew compileKotlinJvm compileTestKotlinJvm`, exit code 0 reale). L'esecuzione di
+  `jvmTest` per questi quattro moduli resta **bloccata** dalla stessa limitazione di rete del
+  sandbox già documentata negli Sprint 2/4 (`dl.google.com` non raggiungibile dal proxy, necessario
+  per risolvere le dipendenze transitive `androidx.lifecycle`/`androidx.collection`/
+  `androidx.annotation` di `compose.foundation`/`compose.material3` a runtime) — non è una
+  regressione introdotta in questo sprint, e non è mascherata: il codice compila realmente (main e
+  test sources), ma i test comportamentali di questi quattro moduli non hanno potuto essere
+  eseguiti in questo ambiente.
+- **Lint**: `detekt` e `ktlintCheck` eseguiti sull'intero repository (`./gradlew detekt
+  ktlintCheck`) — **verdi**, exit code 0 reale, dopo aver trovato e corretto realmente diverse
+  violazioni durante questo stesso sprint (`MaxLineLength`, `LongParameterList`, `LongMethod`,
+  `standard:function-naming`, `standard:statement-wrapping` — vedi §6).
+- **TODO/FIXME residui**: nessuno trovato in una scansione `grep` ricorsiva su `core/`, `domain/`,
+  `feature/`, `androidApp/`, `iosApp/`, `shared/`, `build-logic/`.
 
 ## 5. Limiti d'ambiente
 
@@ -221,6 +237,17 @@ aggiornerà questa sezione con l'esito finale reale non appena la verifica in co
 7. **Due nomi di funzione di test contenenti `:`** (backtick illegale per un identificatore JVM)
    in `UpdateTaskFieldsTest.kt` — errore di compilazione reale, non falso positivo; corretto
    rimuovendo i due punti dai nomi dei test.
+8. **`| tail -N` senza `pipefail` mascherava l'exit code reale di Gradle** durante la prima parte
+   della verifica di questo sprint — un fallimento di build sarebbe potuto apparire "verde" solo
+   perché `tail` stesso termina con successo. Scoperto a metà sprint; corretto adottando
+   `set -o pipefail &&` davanti a ogni invocazione Gradle da questo punto in poi (processo, non
+   codice applicativo — ma un bug reale nel modo in cui questo stesso sprint verificava se stesso).
+9. **Eccezione `ktlint_standard_function-naming` in `.editorconfig` non estesa ai nuovi moduli
+   Compose dello sprint** — `feature-task`/`feature-settings`/`feature-search`/`androidApp`
+   avrebbero fallito `ktlintCheck` sui propri `@Composable` PascalCase (l'eccezione copriva solo
+   `core-designsystem`/`feature-core`, ereditata dallo Sprint 4); corretto estendendo il glob.
+10. **`standard:statement-wrapping` in `SearchViewModelTest.kt`** — due `.apply { record("latte");
+    record("pane") }` su una riga sola; corretto separando le due chiamate su righe distinte.
 
 ## 7. Rischi residui
 
