@@ -24,7 +24,10 @@ import com.omnilife.feature.core.onboarding.FakeTaskRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.todayIn
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -268,7 +271,7 @@ class HomeViewModelTest {
     @Test
     fun `Today Overview shows a real task due today, not a placeholder`() {
         val repository = FakeTaskRepository()
-        val today = kotlinx.datetime.Clock.System.todayIn(kotlinx.datetime.TimeZone.currentSystemDefault())
+        val today = Clock.System.todayIn(TimeZone.currentSystemDefault())
         repository.tasks["t1"] =
             Task(envelope = testEnvelope("t1"), title = "Chiamare il dentista", listId = "list-1", dueDate = today)
         val viewModel = newViewModel(taskRepository = repository)
