@@ -20,7 +20,10 @@ class SettingsUseCasesTest {
 
             assertEquals(SettingKey.entries.toSet(), settings.keys)
             assertEquals(SettingDefaults.THEME, settings.getValue(SettingKey.THEME).value)
-            assertEquals(SettingDefaults.NOTIFICATION_DAILY_BUDGET, settings.getValue(SettingKey.NOTIFICATION_DAILY_BUDGET).value)
+            assertEquals(
+                SettingDefaults.NOTIFICATION_DAILY_BUDGET,
+                settings.getValue(SettingKey.NOTIFICATION_DAILY_BUDGET).value,
+            )
         }
 
     @Test

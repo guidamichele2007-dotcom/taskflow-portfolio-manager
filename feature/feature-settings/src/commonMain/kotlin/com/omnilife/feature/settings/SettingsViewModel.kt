@@ -38,7 +38,8 @@ public class SettingsViewModel(
 
     init {
         _state.update { it.copy(syncStatus = syncStateManager.current()) }
-        syncStateSubscription = syncStateManager.observe { newState -> _state.update { it.copy(syncStatus = newState) } }
+        syncStateSubscription =
+            syncStateManager.observe { newState -> _state.update { it.copy(syncStatus = newState) } }
         dispatch(SettingsIntent.Load)
     }
 

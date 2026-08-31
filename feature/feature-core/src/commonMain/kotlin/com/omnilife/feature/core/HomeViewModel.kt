@@ -64,7 +64,8 @@ public class HomeViewModel(
         // TDR-34: SyncStateManager.observe now returns a Subscription — held here and cancelled
         // in clear() so this ViewModel's listener does not outlive it (fixes the leak documented
         // in sprint4_report.md, "problemi trovati").
-        syncStateSubscription = syncStateManager.observe { newState -> _state.update { it.copy(syncStatus = newState) } }
+        syncStateSubscription =
+            syncStateManager.observe { newState -> _state.update { it.copy(syncStatus = newState) } }
         taskEventSubscriptions =
             listOf(
                 eventBus.subscribe<TaskEvent.Created> { recordActivity(it.taskId, "creato") },
@@ -167,7 +168,8 @@ public class HomeViewModel(
         scope.launch {
             val task = taskRepository.findTaskById(taskId)
             val title = task?.title ?: taskId
-            recentActivity.addFirst(HomeListEntry(id = "$taskId-${recentActivity.size}", title = "$title — $actionLabel"))
+            val entry = HomeListEntry(id = "$taskId-${recentActivity.size}", title = "$title — $actionLabel")
+            recentActivity.addFirst(entry)
             while (recentActivity.size > MAX_RECENT_ACTIVITY) recentActivity.removeLast()
             _state.update {
                 it.copy(sections = it.sections + (HomeWidgetKind.RECENT_ACTIVITY to currentRecentActivitySection()))

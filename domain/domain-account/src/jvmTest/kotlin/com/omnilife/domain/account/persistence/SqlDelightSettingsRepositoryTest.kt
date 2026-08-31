@@ -85,8 +85,9 @@ class SqlDelightSettingsRepositoryTest {
     @Test
     fun `findAllSettings reflects every distinct key stored so far`() =
         runTest {
-            repository.upsertSetting(Setting(SettingKey.THEME, "SYSTEM", modifiedAt = Instant.fromEpochMilliseconds(0)))
-            repository.upsertSetting(Setting(SettingKey.ACCENT_COLOR, "CORALLO", modifiedAt = Instant.fromEpochMilliseconds(0)))
+            val now = Instant.fromEpochMilliseconds(0)
+            repository.upsertSetting(Setting(SettingKey.THEME, "SYSTEM", modifiedAt = now))
+            repository.upsertSetting(Setting(SettingKey.ACCENT_COLOR, "CORALLO", modifiedAt = now))
 
             val keys = repository.findAllSettings().map { it.key }.toSet()
 
