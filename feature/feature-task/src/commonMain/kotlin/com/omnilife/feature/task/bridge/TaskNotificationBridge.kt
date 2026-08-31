@@ -55,6 +55,7 @@ public class TaskNotificationBridge(
             eventBus.subscribe<TaskEvent.Updated> { reconcile(it.taskId) },
             eventBus.subscribe<TaskEvent.Rescheduled> { reconcile(it.taskId) },
             eventBus.subscribe<TaskEvent.Uncompleted> { reconcile(it.taskId) },
+            eventBus.subscribe<TaskEvent.Restored> { reconcile(it.taskId) },
             eventBus.subscribe<TaskEvent.Completed> { cancelReminder(it.taskId) },
             eventBus.subscribe<TaskEvent.Deleted> { cancelReminder(it.taskId) },
         )

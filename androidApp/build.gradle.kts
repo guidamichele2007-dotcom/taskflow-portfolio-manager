@@ -43,6 +43,54 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
+
+    // Sprint 6 §14: three real, reproducible variants — Debug (local development, the AGP
+    // default), Internal (installable alongside Debug/Release for testers, signed with the same
+    // auto-generated debug keystore so no secret needs to exist for it), Release (store-shaped:
+    // minified/shrunk, must be signed with a real upload key supplied out-of-band). No variant
+    // here fakes a signature or bundles a secret into the repo — see the `signingConfigs` block.
+    signingConfigs {
+        create("release") {
+            // Deliberately never hardcoded: a release build without these four environment
+            // variables set is simply unsigned — `assembleRelease`/`bundleRelease` then fails
+            // Gradle's own signing-config validation with a clear error, not a silent fake key.
+            val storeFilePath = providers.environmentVariable("OMNILIFE_RELEASE_STORE_FILE").orNull
+            val storePasswordEnv = providers.environmentVariable("OMNILIFE_RELEASE_STORE_PASSWORD").orNull
+            val keyAliasEnv = providers.environmentVariable("OMNILIFE_RELEASE_KEY_ALIAS").orNull
+            val keyPasswordEnv = providers.environmentVariable("OMNILIFE_RELEASE_KEY_PASSWORD").orNull
+            if (storeFilePath != null && storePasswordEnv != null && keyAliasEnv != null && keyPasswordEnv != null) {
+                storeFile = file(storeFilePath)
+                storePassword = storePasswordEnv
+                keyAlias = keyAliasEnv
+                keyPassword = keyPasswordEnv
+            }
+        }
+    }
+
+    buildTypes {
+        debug {
+            applicationIdSuffix = ".debug"
+            versionNameSuffix = "-debug"
+            isDebuggable = true
+        }
+        create("internal") {
+            // Signed with AGP's own auto-generated debug keystore (~/.android/debug.keystore) —
+            // the standard pattern for a tester-installable build that isn't the store release,
+            // needing no secret of its own. Installable side-by-side with debug/release thanks to
+            // the distinct applicationId suffix.
+            applicationIdSuffix = ".internal"
+            versionNameSuffix = "-internal"
+            isDebuggable = false
+            isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("debug")
+        }
+        release {
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            signingConfig = signingConfigs.getByName("release")
+        }
+    }
 }
 
 dependencies {
@@ -67,4 +115,8 @@ dependencies {
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.activity:activity-compose:1.9.2")
+    // NotificationFireReceiver (Sprint 6) posts the real system notification directly via
+    // NotificationCompat/NotificationManagerCompat — same androidx.core version core-notifications
+    // already depends on for ContextCompat, kept in sync rather than left to transitive resolution.
+    implementation("androidx.core:core-ktx:1.13.1")
 }

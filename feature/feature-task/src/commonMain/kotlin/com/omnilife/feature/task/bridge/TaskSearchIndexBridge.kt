@@ -25,9 +25,9 @@ import kotlinx.coroutines.launch
  *
  * A trashed task is **re-indexed**, never removed (SRCH-006: archived/trashed entities stay
  * indexed, excluded from default results only via [com.omnilife.core.search.SearchFilter]'s
- * opt-in) — [SearchIndexer.remove] is reserved for permanent deletion, which this sprint's
- * `PermanentlyDeleteTask` use case does not yet publish an event for (see sprint5_report.md,
- * residual risks).
+ * opt-in) — [SearchIndexer.remove] is reserved for permanent deletion
+ * ([TaskEvent.PermanentlyDeleted], Sprint 6 — previously unpublished, a documented Sprint 5
+ * residual risk; see sprint6_report.md §6).
  */
 public class TaskSearchIndexBridge(
     private val repository: TaskRepository,
@@ -43,6 +43,8 @@ public class TaskSearchIndexBridge(
             eventBus.subscribe<TaskEvent.Uncompleted> { reindex(it.taskId) },
             eventBus.subscribe<TaskEvent.Rescheduled> { reindex(it.taskId) },
             eventBus.subscribe<TaskEvent.Deleted> { reindex(it.taskId) },
+            eventBus.subscribe<TaskEvent.Restored> { reindex(it.taskId) },
+            eventBus.subscribe<TaskEvent.PermanentlyDeleted> { searchIndexer.remove(it.taskId) },
         )
 
     private fun reindex(taskId: EntityId) {

@@ -59,6 +59,7 @@ public class TaskSyncOutboxBridge(
             eventBus.subscribe<TaskEvent.Uncompleted> { enqueue(it.taskId) },
             eventBus.subscribe<TaskEvent.Rescheduled> { enqueue(it.taskId) },
             eventBus.subscribe<TaskEvent.Deleted> { enqueue(it.taskId) },
+            eventBus.subscribe<TaskEvent.Restored> { enqueue(it.taskId) },
         )
 
     private fun enqueue(taskId: EntityId) {

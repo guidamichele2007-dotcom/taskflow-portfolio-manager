@@ -48,7 +48,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.Clock
 
 /**
@@ -103,6 +102,9 @@ public class AppContainer(context: Context) {
     public val syncStateManager: SyncStateManager = InMemorySyncStateManager()
 
     public val notificationHistoryStore: NotificationHistoryStore = InMemoryNotificationHistoryStore()
+    // Named (not inlined into DefaultLocalNotificationService below) because NotificationFireReceiver
+    // (Sprint 6) also needs it, via the same process-wide AppContainer singleton (OmniLifeApplication).
+    public val notificationPermissionManager: NotificationPermissionManager = NotificationPermissionManager(appContext)
     public val notificationBroker: NotificationBroker =
         NotificationBroker(
             categoryRegistry = InMemoryNotificationCategoryRegistry(),
@@ -113,7 +115,7 @@ public class AppContainer(context: Context) {
                 DefaultLocalNotificationService(
                     scheduler = NotificationScheduler(appContext),
                     channelRegistry = NotificationChannelRegistry(appContext),
-                    permissionManager = NotificationPermissionManager(appContext),
+                    permissionManager = notificationPermissionManager,
                 ),
             eventBus = eventBus,
         )
@@ -135,7 +137,7 @@ public class AppContainer(context: Context) {
 
     // Settings/onboarding use cases.
     public val getSettings: GetSettings = GetSettings(settingsRepository)
-    public val updateSetting: UpdateSetting = UpdateSetting(settingsRepository)
+    public val updateSetting: UpdateSetting = UpdateSetting(settingsRepository, eventBus)
     public val completeOnboarding: CompleteOnboarding = CompleteOnboarding(settingsRepository)
     public val resetOnboarding: ResetOnboarding = ResetOnboarding(settingsRepository)
     public val getOnboardingState: GetOnboardingState = GetOnboardingState(settingsRepository)
@@ -161,9 +163,6 @@ public class AppContainer(context: Context) {
             scope = appScope,
         )
 
-    /** Resolved once at startup and reused everywhere a [CreateTask]/[GetTasksForView] caller needs a list id. */
-    public val defaultListId: String by lazy { ensureDefaultTaskList() }
-
     public fun accountId(): String = ownerAccountId
 
     public fun deviceIdentifier(): String = deviceId
@@ -180,32 +179,37 @@ public class AppContainer(context: Context) {
     /**
      * TASK-005: every account needs at least the non-deletable default "Attività" list before
      * Quick Capture can attach a task to one. Idempotent (checks [TaskRepository.findAllLists]
-     * first) — runs once at startup via [runBlocking] since there is no async app-startup hook
-     * wired in this bootstrap-scope `MainActivity`.
+     * first).
+     *
+     * Sprint 6: this used to be a `defaultListId: String by lazy { runBlocking { ... } }`
+     * property, resolved synchronously on whichever thread first touched it — in practice the
+     * Compose main thread during `MainActivity`'s first composition, a real blocking-the-UI-thread
+     * bug (found during this sprint's threading audit). Now a plain suspend function;
+     * `MainActivity` awaits it once during its async startup gate (see `MainActivity.kt`) and
+     * passes the resolved id down, so nothing on the UI thread blocks on database I/O.
      */
-    private fun ensureDefaultTaskList(): String =
-        runBlocking {
-            val existing = taskRepository.findAllLists().firstOrNull { it.isDefault }
-            if (existing != null) return@runBlocking existing.envelope.id
-            val now = Clock.System.now()
-            val list =
-                TaskList(
-                    envelope =
-                        com.omnilife.core.common.Envelope(
-                            id = newId(),
-                            ownerAccountId = ownerAccountId,
-                            schemaVersion = 1,
-                            createdAt = now,
-                            createdByDevice = deviceId,
-                            modifiedAt = now,
-                            modifiedByDevice = deviceId,
-                        ),
-                    name = "Attività",
-                    isDefault = true,
-                )
-            taskRepository.insertList(list)
-            list.envelope.id
-        }
+    public suspend fun resolveDefaultListId(): String {
+        val existing = taskRepository.findAllLists().firstOrNull { it.isDefault }
+        if (existing != null) return existing.envelope.id
+        val now = Clock.System.now()
+        val list =
+            TaskList(
+                envelope =
+                    com.omnilife.core.common.Envelope(
+                        id = newId(),
+                        ownerAccountId = ownerAccountId,
+                        schemaVersion = 1,
+                        createdAt = now,
+                        createdByDevice = deviceId,
+                        modifiedAt = now,
+                        modifiedByDevice = deviceId,
+                    ),
+                name = "Attività",
+                isDefault = true,
+            )
+        taskRepository.insertList(list)
+        return list.envelope.id
+    }
 
     private fun newId(): String = java.util.UUID.randomUUID().toString()
 }

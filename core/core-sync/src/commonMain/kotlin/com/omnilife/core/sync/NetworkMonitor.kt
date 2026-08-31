@@ -12,7 +12,17 @@ package com.omnilife.core.sync
 public interface NetworkMonitor {
     public fun isOnline(): Boolean
 
-    public fun onConnectivityChanged(listener: (Boolean) -> Unit)
+    public fun onConnectivityChanged(listener: (Boolean) -> Unit): NetworkMonitorSubscription
+}
+
+/**
+ * Sprint 6: mirrors [SyncStateSubscription] (TDR-34) — found during this sprint's leak audit that
+ * [NetworkMonitor.onConnectivityChanged] had the exact same unsubscribe-less shape the Sprint 5
+ * leak fix targeted, just never applied here (no production caller exists yet, so it hadn't bitten
+ * anyone, but the next caller to wire this up would have inherited the same leak).
+ */
+public fun interface NetworkMonitorSubscription {
+    public fun cancel()
 }
 
 public class ManualNetworkMonitor(initiallyOnline: Boolean = true) : NetworkMonitor {
@@ -21,8 +31,9 @@ public class ManualNetworkMonitor(initiallyOnline: Boolean = true) : NetworkMoni
 
     override fun isOnline(): Boolean = online
 
-    override fun onConnectivityChanged(listener: (Boolean) -> Unit) {
+    override fun onConnectivityChanged(listener: (Boolean) -> Unit): NetworkMonitorSubscription {
         listeners.add(listener)
+        return NetworkMonitorSubscription { listeners.remove(listener) }
     }
 
     /** Test/manual-control seam — a real platform actual would call this from its own callback. */

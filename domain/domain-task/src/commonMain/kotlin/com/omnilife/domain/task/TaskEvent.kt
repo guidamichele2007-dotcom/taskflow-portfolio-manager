@@ -36,6 +36,24 @@ public sealed interface TaskEvent : DomainEvent {
 
     public data class Deleted(val taskId: EntityId, val at: Instant) : TaskEvent
 
+    /**
+     * `task.item.restored` (Sprint 6): trash recovery via [com.omnilife.domain.task.usecase.RestoreTask].
+     * Added after finding `RestoreTask` published nothing — the search index kept the task marked
+     * TRASHED, its reminder was never rescheduled, and the outbox never queued the restore for
+     * sync, all silently, until the next unrelated edit. Same minimal shape as every other event.
+     */
+    public data class Restored(val taskId: EntityId, val at: Instant) : TaskEvent
+
     /** `task.overdue.count.changed` — a list-level count, not tied to one task id. */
     public data class OverdueCountChanged(val newOverdueCount: Int, val at: Instant) : TaskEvent
+
+    /**
+     * `task.item.permanently-deleted` (Sprint 6): published by
+     * [com.omnilife.domain.task.usecase.PermanentlyDeleteTask], whose row is gone from the
+     * repository by the time this fires — unlike every other event here, a subscriber must NOT
+     * try to re-read the task; the id is all there is. Was previously unpublished (a documented
+     * Sprint 5 residual risk): the search index kept an orphaned row for a permanently-deleted
+     * task forever, a ghost result if `includeArchivedOrTrashed` is ever used.
+     */
+    public data class PermanentlyDeleted(val taskId: EntityId, val at: Instant) : TaskEvent
 }

@@ -3,11 +3,13 @@ package com.omnilife.app
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -15,11 +17,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import com.omnilife.core.designsystem.components.OmniBottomBar
+import com.omnilife.core.designsystem.components.OmniLoadingState
 import com.omnilife.core.designsystem.components.OmniTabBarItem
 import com.omnilife.core.designsystem.theme.OmniIconType
 import com.omnilife.core.designsystem.theme.OmniTheme
 import com.omnilife.core.designtokens.OmniAccent
+import com.omnilife.core.eventbus.subscribe
 import com.omnilife.domain.account.AccentColor
+import com.omnilife.domain.account.SettingEvent
 import com.omnilife.domain.account.SettingKey
 import com.omnilife.domain.account.ThemeMode
 import com.omnilife.feature.core.HomeIntent
@@ -37,68 +42,148 @@ import com.omnilife.feature.task.TaskDetailBottomSheet
 import com.omnilife.feature.task.TaskDetailViewModel
 import com.omnilife.feature.task.TaskListScreen
 import com.omnilife.feature.task.TaskListViewModel
-import kotlinx.coroutines.runBlocking
 
 /**
- * Application entry point (Sprint 5, Macro Sprint "MVP Vertical Slice"). Real composition of
- * [AppContainer]'s repositories/use cases/bridges into the hand-rolled 4-tab shell (TDR-38,
- * Navigation Bible §3), gated by real onboarding-completion state (`domain-account`).
+ * Application entry point (Sprint 5, Macro Sprint "MVP Vertical Slice"; hardened Sprint 6). Real
+ * composition of [AppContainer]'s repositories/use cases/bridges into the hand-rolled 4-tab shell
+ * (TDR-38, Navigation Bible §3), gated by real onboarding-completion state (`domain-account`).
+ *
+ * **Sprint 6 fixes** (found during that sprint's threading/state audit, see `sprint6_report.md`):
+ * - Startup no longer blocks the main thread with `runBlocking` — [OmniLifeApp] loads onboarding
+ *   state, settings, and the default task list asynchronously via [LaunchedEffect], showing
+ *   [OmniLoadingState] meanwhile.
+ * - Theme/accent are read once *and* kept live: [SettingEvent.Updated] (published by
+ *   `UpdateSetting`) is subscribed here, so changing the theme in Settings applies immediately
+ *   instead of requiring an app restart. `SYSTEM` now genuinely follows the device's light/dark
+ *   setting instead of always resolving to light.
+ * - The four tab ViewModels ([HomeViewModel], [TaskListViewModel], [SearchViewModel],
+ *   [SettingsViewModel]) are created once in [AppShell] instead of inside the per-tab `when`
+ *   branch — the old code destroyed and recreated them (losing search text, scroll position, and
+ *   re-fetching Home) every time the user switched bottom tabs.
  *
  * **Not compiled/verified in this sandbox** — see `README.md`'s note (no Android SDK here).
  */
 public class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val container = AppContainer(this)
-        setContent {
-            var onboardingCompleted by
-                remember { mutableStateOf(runBlocking { container.getOnboardingState().completed }) }
-            var theme by remember { mutableStateOf(ThemeMode.SYSTEM) }
-            var accent by remember { mutableStateOf(AccentColor.INDACO) }
-            DisposableEffect(Unit) {
-                val settings = runBlocking { container.getSettings() }
-                theme = ThemeMode.valueOf(settings.getValue(SettingKey.THEME).value)
-                accent = AccentColor.valueOf(settings.getValue(SettingKey.ACCENT_COLOR).value)
-                onDispose {}
-            }
-
-            OmniTheme(darkTheme = theme == ThemeMode.DARK, accent = accent.toOmniAccent()) {
-                if (!onboardingCompleted) {
-                    val onboardingViewModel =
-                        remember {
-                            OnboardingViewModel(
-                                updateSetting = container.updateSetting,
-                                completeOnboarding = container.completeOnboarding,
-                                createTask = container.createTask,
-                                listId = container.defaultListId,
-                                ownerAccountId = container.accountId(),
-                                deviceId = container.deviceIdentifier(),
-                                onCompleted = { onboardingCompleted = true },
-                            )
-                        }
-                    val state by onboardingViewModel.state.collectAsState()
-                    OnboardingScreen(state = state, onIntent = onboardingViewModel::dispatch)
-                } else {
-                    AppShell(container)
-                }
-            }
-        }
+        val container = (application as OmniLifeApplication).container
+        setContent { OmniLifeApp(container) }
     }
+}
+
+private data class StartupSnapshot(
+    val onboardingCompleted: Boolean,
+    val theme: ThemeMode,
+    val accent: AccentColor,
+    val defaultListId: String,
+)
+
+private suspend fun loadStartupSnapshot(container: AppContainer): StartupSnapshot {
+    val onboardingCompleted = container.getOnboardingState().completed
+    val settings = container.getSettings()
+    val theme = ThemeMode.valueOf(settings.getValue(SettingKey.THEME).value)
+    val accent = AccentColor.valueOf(settings.getValue(SettingKey.ACCENT_COLOR).value)
+    val listId = container.resolveDefaultListId()
+    return StartupSnapshot(onboardingCompleted, theme, accent, listId)
 }
 
 private fun AccentColor.toOmniAccent(): OmniAccent = OmniAccent.valueOf(name)
 
 @Composable
-private fun AppShell(container: AppContainer) {
+private fun resolveDarkTheme(mode: ThemeMode): Boolean =
+    when (mode) {
+        ThemeMode.DARK -> true
+        ThemeMode.LIGHT -> false
+        ThemeMode.SYSTEM -> isSystemInDarkTheme()
+    }
+
+@Composable
+private fun OmniLifeApp(container: AppContainer) {
+    var startup by remember { mutableStateOf<StartupSnapshot?>(null) }
+    LaunchedEffect(Unit) { startup = loadStartupSnapshot(container) }
+
+    val snapshot = startup
+    if (snapshot == null) {
+        OmniTheme(darkTheme = isSystemInDarkTheme()) {
+            OmniLoadingState(modifier = Modifier.fillMaxSize())
+        }
+        return
+    }
+
+    var onboardingCompleted by remember { mutableStateOf(snapshot.onboardingCompleted) }
+    var theme by remember { mutableStateOf(snapshot.theme) }
+    var accent by remember { mutableStateOf(snapshot.accent) }
+    DisposableEffect(Unit) {
+        val subscription =
+            container.eventBus.subscribe<SettingEvent.Updated> { event ->
+                when (event.key) {
+                    SettingKey.THEME -> theme = ThemeMode.valueOf(event.value)
+                    SettingKey.ACCENT_COLOR -> accent = AccentColor.valueOf(event.value)
+                    else -> Unit
+                }
+            }
+        onDispose { subscription.cancel() }
+    }
+
+    OmniTheme(darkTheme = resolveDarkTheme(theme), accent = accent.toOmniAccent()) {
+        if (!onboardingCompleted) {
+            OnboardingHost(
+                container = container,
+                listId = snapshot.defaultListId,
+                onCompleted = { onboardingCompleted = true },
+            )
+        } else {
+            AppShell(container = container, defaultListId = snapshot.defaultListId)
+        }
+    }
+}
+
+@Composable
+private fun OnboardingHost(
+    container: AppContainer,
+    listId: String,
+    onCompleted: () -> Unit,
+) {
+    val onboardingViewModel =
+        remember {
+            OnboardingViewModel(
+                updateSetting = container.updateSetting,
+                completeOnboarding = container.completeOnboarding,
+                createTask = container.createTask,
+                listId = listId,
+                ownerAccountId = container.accountId(),
+                deviceId = container.deviceIdentifier(),
+                onCompleted = onCompleted,
+            )
+        }
+    val state by onboardingViewModel.state.collectAsState()
+    OnboardingScreen(state = state, onIntent = onboardingViewModel::dispatch)
+}
+
+@Composable
+private fun AppShell(
+    container: AppContainer,
+    defaultListId: String,
+) {
     var selectedTab by remember { mutableStateOf(AppTab.OGGI) }
     var openTaskId by remember { mutableStateOf<String?>(null) }
     var creatingTask by remember { mutableStateOf(false) }
 
+    // Sprint 6: created once here (not inside AppTabContent's `when` branch), so switching tabs
+    // no longer destroys and rebuilds each ViewModel — see class doc.
+    val homeViewModel = rememberHomeViewModel(container)
+    val taskListViewModel = rememberTaskListViewModel(container)
+    val searchViewModel = remember { SearchViewModel(container.unifiedSearchService, container.recentSearchStore) }
+    val settingsViewModel = rememberSettingsViewModel(container)
+
     Column(modifier = Modifier.fillMaxSize()) {
         Box(modifier = Modifier.weight(1f)) {
             AppTabContent(
-                container = container,
                 selectedTab = selectedTab,
+                homeViewModel = homeViewModel,
+                taskListViewModel = taskListViewModel,
+                searchViewModel = searchViewModel,
+                settingsViewModel = settingsViewModel,
                 onOpenTask = { openTaskId = it },
                 onCapture = { creatingTask = true },
             )
@@ -113,6 +198,7 @@ private fun AppShell(container: AppContainer) {
     if (creatingTask) {
         TaskCreateOverlay(
             container = container,
+            defaultListId = defaultListId,
             onDismiss = { creatingTask = false },
             onCreated = { createdId ->
                 creatingTask = false
@@ -123,9 +209,63 @@ private fun AppShell(container: AppContainer) {
 }
 
 @Composable
+private fun rememberHomeViewModel(container: AppContainer): HomeViewModel {
+    val viewModel =
+        remember {
+            HomeViewModel(
+                syncStateManager = container.syncStateManager,
+                notificationBroker = container.notificationBroker,
+                notificationHistoryStore = container.notificationHistoryStore,
+                searchService = container.unifiedSearchService,
+                taskRepository = container.taskRepository,
+                eventBus = container.eventBus,
+                recentSearchStore = container.recentSearchStore,
+            )
+        }
+    DisposableEffect(Unit) { onDispose { viewModel.clear() } }
+    return viewModel
+}
+
+@Composable
+private fun rememberTaskListViewModel(container: AppContainer): TaskListViewModel {
+    val viewModel =
+        remember {
+            TaskListViewModel(
+                getTasksForView = container.getTasksForView,
+                completeTask = container.completeTask,
+                uncompleteTask = container.uncompleteTask,
+                deleteTask = container.deleteTask,
+                postponeTask = container.postponeTask,
+                reorderTasks = container.reorderTasks,
+                searchTasks = container.searchTasks,
+            )
+        }
+    DisposableEffect(Unit) { onDispose { viewModel.clear() } }
+    return viewModel
+}
+
+@Composable
+private fun rememberSettingsViewModel(container: AppContainer): SettingsViewModel {
+    val viewModel =
+        remember {
+            SettingsViewModel(
+                getSettings = container.getSettings,
+                updateSetting = container.updateSetting,
+                resetOnboarding = container.resetOnboarding,
+                syncStateManager = container.syncStateManager,
+            )
+        }
+    DisposableEffect(Unit) { onDispose { viewModel.clear() } }
+    return viewModel
+}
+
+@Composable
 private fun AppTabContent(
-    container: AppContainer,
     selectedTab: AppTab,
+    homeViewModel: HomeViewModel,
+    taskListViewModel: TaskListViewModel,
+    searchViewModel: SearchViewModel,
+    settingsViewModel: SettingsViewModel,
     onOpenTask: (String) -> Unit,
     onCapture: () -> Unit,
 ) {
@@ -133,10 +273,10 @@ private fun AppTabContent(
         // HomeScreen's widget rows don't yet carry a per-entry onClick (Sprint 4's
         // HomeSectionState/HomeListEntry shape has no click callback) — tapping a task from
         // Today Overview to open its detail sheet is a residual gap, not wired here.
-        AppTab.OGGI -> HomeTab(container = container, onCapture = onCapture)
-        AppTab.MODULI -> TaskListTab(container = container, onOpenTask = onOpenTask, onCapture = onCapture)
-        AppTab.CERCA -> SearchTab(container = container, onOpenTask = onOpenTask)
-        AppTab.PROFILO -> SettingsTab(container = container)
+        AppTab.OGGI -> HomeTab(viewModel = homeViewModel, onCapture = onCapture)
+        AppTab.MODULI -> TaskListTab(viewModel = taskListViewModel, onOpenTask = onOpenTask, onCapture = onCapture)
+        AppTab.CERCA -> SearchTab(viewModel = searchViewModel, onOpenTask = onOpenTask)
+        AppTab.PROFILO -> SettingsTab(viewModel = settingsViewModel)
     }
 }
 
@@ -188,6 +328,7 @@ private fun TaskDetailOverlay(
 @Composable
 private fun TaskCreateOverlay(
     container: AppContainer,
+    defaultListId: String,
     onDismiss: () -> Unit,
     onCreated: (String) -> Unit,
 ) {
@@ -195,7 +336,7 @@ private fun TaskCreateOverlay(
         remember {
             TaskCreateViewModel(
                 createTask = container.createTask,
-                listId = container.defaultListId,
+                listId = defaultListId,
                 ownerAccountId = container.accountId(),
                 deviceId = container.deviceIdentifier(),
             )
@@ -212,22 +353,9 @@ private fun TaskCreateOverlay(
 
 @Composable
 private fun HomeTab(
-    container: AppContainer,
+    viewModel: HomeViewModel,
     onCapture: () -> Unit,
 ) {
-    val viewModel =
-        remember {
-            HomeViewModel(
-                syncStateManager = container.syncStateManager,
-                notificationBroker = container.notificationBroker,
-                notificationHistoryStore = container.notificationHistoryStore,
-                searchService = container.unifiedSearchService,
-                taskRepository = container.taskRepository,
-                eventBus = container.eventBus,
-                recentSearchStore = container.recentSearchStore,
-            )
-        }
-    DisposableEffect(Unit) { onDispose { viewModel.clear() } }
     val state by viewModel.state.collectAsState()
     HomeScreen(
         state = state,
@@ -240,33 +368,19 @@ private fun HomeTab(
 
 @Composable
 private fun TaskListTab(
-    container: AppContainer,
+    viewModel: TaskListViewModel,
     onOpenTask: (String) -> Unit,
     onCapture: () -> Unit,
 ) {
-    val viewModel =
-        remember {
-            TaskListViewModel(
-                getTasksForView = container.getTasksForView,
-                completeTask = container.completeTask,
-                uncompleteTask = container.uncompleteTask,
-                deleteTask = container.deleteTask,
-                postponeTask = container.postponeTask,
-                reorderTasks = container.reorderTasks,
-                searchTasks = container.searchTasks,
-            )
-        }
-    DisposableEffect(Unit) { onDispose { viewModel.clear() } }
     val state by viewModel.state.collectAsState()
     TaskListScreen(state = state, onIntent = viewModel::dispatch, onTaskClick = onOpenTask, onCapture = onCapture)
 }
 
 @Composable
 private fun SearchTab(
-    container: AppContainer,
+    viewModel: SearchViewModel,
     onOpenTask: (String) -> Unit,
 ) {
-    val viewModel = remember { SearchViewModel(container.unifiedSearchService, container.recentSearchStore) }
     val state by viewModel.state.collectAsState()
     SearchScreen(
         state = state,
@@ -276,17 +390,7 @@ private fun SearchTab(
 }
 
 @Composable
-private fun SettingsTab(container: AppContainer) {
-    val viewModel =
-        remember {
-            SettingsViewModel(
-                getSettings = container.getSettings,
-                updateSetting = container.updateSetting,
-                resetOnboarding = container.resetOnboarding,
-                syncStateManager = container.syncStateManager,
-            )
-        }
-    DisposableEffect(Unit) { onDispose { viewModel.clear() } }
+private fun SettingsTab(viewModel: SettingsViewModel) {
     val state by viewModel.state.collectAsState()
     SettingsScreen(state = state, onIntent = viewModel::dispatch)
 }

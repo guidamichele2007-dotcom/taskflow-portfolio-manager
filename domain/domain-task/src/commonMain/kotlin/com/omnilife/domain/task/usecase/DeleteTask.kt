@@ -39,7 +39,11 @@ public class DeleteTask(
 }
 
 /** MFC-R-10: restore from trash returns to the original list, identical to before. */
-public class RestoreTask(private val repository: TaskRepository, private val clock: Clock = Clock.System) {
+public class RestoreTask(
+    private val repository: TaskRepository,
+    private val eventBus: EventBus,
+    private val clock: Clock = Clock.System,
+) {
     public suspend operator fun invoke(taskId: EntityId): OmniResult<Task> {
         val task = repository.findTaskById(taskId) ?: return OmniResult.Failure(TaskError.TaskNotFound(taskId))
         val now = clock.now()
@@ -53,6 +57,7 @@ public class RestoreTask(private val repository: TaskRepository, private val clo
                     ),
             )
         repository.updateTask(restored)
+        eventBus.publish(TaskEvent.Restored(taskId, now))
         return OmniResult.Success(restored)
     }
 }
@@ -63,10 +68,15 @@ public class RestoreTask(private val repository: TaskRepository, private val clo
  * (feature-task); this use case performs the irreversible operation once the
  * UI has already obtained it.
  */
-public class PermanentlyDeleteTask(private val repository: TaskRepository) {
+public class PermanentlyDeleteTask(
+    private val repository: TaskRepository,
+    private val eventBus: EventBus,
+    private val clock: Clock = Clock.System,
+) {
     public suspend operator fun invoke(taskId: EntityId): OmniResult<Unit> {
         repository.permanentlyDeleteSubtasksForTask(taskId)
         repository.permanentlyDeleteTask(taskId)
+        eventBus.publish(TaskEvent.PermanentlyDeleted(taskId, clock.now()))
         return OmniResult.Success(Unit)
     }
 }

@@ -1,7 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- Sprint 6: both required just to make the already-decided notification design (TDR-26,
+         AlarmManager.setExactAndAllowWhileIdle) work at all on a real device — without
+         POST_NOTIFICATIONS the system silently shows nothing on API 33+, and without
+         SCHEDULE_EXACT_ALARM the scheduler call throws SecurityException on API 31+ (guarded in
+         NotificationScheduler.kt with a non-exact fallback, but the permission should still be
+         requested so the common case gets exact timing). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+
     <application
+        android:name=".OmniLifeApplication"
         android:label="OmniLife"
         android:allowBackup="false">
 
@@ -13,6 +23,18 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Sprint 6: catches AlarmManager's broadcast when a scheduled reminder fires — see
+             NotificationFireReceiver's doc comment. Not exported: only this app's own
+             PendingIntent (package-targeted, not a public action anyone can broadcast) reaches
+             it. -->
+        <receiver
+            android:name=".NotificationFireReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.omnilife.core.notifications.ACTION_FIRE" />
+            </intent-filter>
+        </receiver>
     </application>
 
 </manifest>

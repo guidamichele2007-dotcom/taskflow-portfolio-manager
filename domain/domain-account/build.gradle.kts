@@ -27,6 +27,10 @@ kotlin {
             // SqlDelightSettingsRepository...) exposes core-common types directly in its
             // signatures — same reasoning as domain-task's build.gradle.kts.
             api(project(":core:core-common"))
+            // `UpdateSetting` publishes `SettingEvent` (Sprint 6, mirrors domain-task's TDR-35
+            // pattern) so consumers — MainActivity's live theme/accent — don't need a polling or
+            // restart-to-see-it path. `api`: the constructor signature exposes `EventBus`.
+            api(project(":core:core-eventbus"))
             api(libs.kotlinx.datetime)
             api("app.cash.sqldelight:runtime:2.0.2")
         }

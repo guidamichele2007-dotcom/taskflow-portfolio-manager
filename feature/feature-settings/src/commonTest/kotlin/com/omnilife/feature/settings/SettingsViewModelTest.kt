@@ -1,5 +1,6 @@
 package com.omnilife.feature.settings
 
+import com.omnilife.core.eventbus.InMemoryEventBus
 import com.omnilife.core.sync.InMemorySyncStateManager
 import com.omnilife.core.sync.SyncPhase
 import com.omnilife.domain.account.AccentColor
@@ -26,7 +27,7 @@ class SettingsViewModelTest {
         syncStateManager: InMemorySyncStateManager = InMemorySyncStateManager(),
     ) = SettingsViewModel(
         getSettings = GetSettings(repository),
-        updateSetting = UpdateSetting(repository),
+        updateSetting = UpdateSetting(repository, InMemoryEventBus()),
         resetOnboarding = ResetOnboarding(repository),
         syncStateManager = syncStateManager,
         scope = CoroutineScope(UnconfinedTestDispatcher()),

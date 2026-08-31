@@ -8,6 +8,8 @@ import com.omnilife.domain.task.Task
 import com.omnilife.domain.task.usecase.CreateTask
 import com.omnilife.domain.task.usecase.DeleteTask
 import com.omnilife.domain.task.usecase.Edit
+import com.omnilife.domain.task.usecase.PermanentlyDeleteTask
+import com.omnilife.domain.task.usecase.RestoreTask
 import com.omnilife.domain.task.usecase.TaskFieldEdits
 import com.omnilife.domain.task.usecase.UpdateTaskFields
 import com.omnilife.feature.task.FakeTaskRepository
@@ -90,6 +92,41 @@ class TaskSearchIndexBridgeTest {
             deleteTask("task-1")
 
             assertEquals("TRASHED", indexer.indexed["task-1"]?.lifecycleState)
+        }
+
+    @Test
+    fun `restoring a trashed task re-indexes it as ACTIVE (Sprint 6 fix)`() =
+        runTest {
+            val repository = FakeTaskRepository()
+            val indexer = FakeSearchIndexer()
+            val eventBus = InMemoryEventBus()
+            val scope = CoroutineScope(UnconfinedTestDispatcher())
+            TaskSearchIndexBridge(repository, indexer, eventBus, scope)
+            val createTask = CreateTask(repository, eventBus, newId = { "task-1" })
+            createTask("Buy milk", listId = "list-1", ownerAccountId = "acc-1", deviceId = "dev-1")
+            DeleteTask(repository, eventBus)("task-1")
+            assertEquals("TRASHED", indexer.indexed["task-1"]?.lifecycleState)
+
+            RestoreTask(repository, eventBus)("task-1")
+
+            assertEquals("ACTIVE", indexer.indexed["task-1"]?.lifecycleState)
+        }
+
+    @Test
+    fun `permanently deleting a task removes it from the index entirely (Sprint 6 fix)`() =
+        runTest {
+            val repository = FakeTaskRepository()
+            val indexer = FakeSearchIndexer()
+            val eventBus = InMemoryEventBus()
+            val scope = CoroutineScope(UnconfinedTestDispatcher())
+            TaskSearchIndexBridge(repository, indexer, eventBus, scope)
+            val createTask = CreateTask(repository, eventBus, newId = { "task-1" })
+            createTask("Buy milk", listId = "list-1", ownerAccountId = "acc-1", deviceId = "dev-1")
+            assertTrue(indexer.indexed.containsKey("task-1"))
+
+            PermanentlyDeleteTask(repository, eventBus)("task-1")
+
+            assertTrue(!indexer.indexed.containsKey("task-1"))
         }
 
     @Test

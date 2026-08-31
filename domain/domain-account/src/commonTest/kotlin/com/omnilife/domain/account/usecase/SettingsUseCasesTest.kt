@@ -1,7 +1,10 @@
 package com.omnilife.domain.account.usecase
 
 import com.omnilife.core.common.OmniResult
+import com.omnilife.core.eventbus.InMemoryEventBus
+import com.omnilife.core.eventbus.subscribe
 import com.omnilife.domain.account.SettingDefaults
+import com.omnilife.domain.account.SettingEvent
 import com.omnilife.domain.account.SettingError
 import com.omnilife.domain.account.SettingKey
 import com.omnilife.domain.account.SettingScope
@@ -30,7 +33,7 @@ class SettingsUseCasesTest {
     fun `GetSettings prefers a stored value over the default`() =
         runTest {
             val repository = FakeSettingsRepository()
-            UpdateSetting(repository)(SettingKey.THEME, "DARK")
+            UpdateSetting(repository, InMemoryEventBus())(SettingKey.THEME, "DARK")
 
             val settings = GetSettings(repository)()
 
@@ -42,7 +45,7 @@ class SettingsUseCasesTest {
         runTest {
             val repository = FakeSettingsRepository()
 
-            val result = UpdateSetting(repository)(SettingKey.THEME, "LIGHT")
+            val result = UpdateSetting(repository, InMemoryEventBus())(SettingKey.THEME, "LIGHT")
 
             assertTrue(result is OmniResult.Success)
             val stored = repository.findSetting(SettingKey.THEME)
@@ -52,11 +55,37 @@ class SettingsUseCasesTest {
         }
 
     @Test
+    fun `a successful UpdateSetting publishes SettingEvent Updated with the new value`() =
+        runTest {
+            val repository = FakeSettingsRepository()
+            val eventBus = InMemoryEventBus()
+            val received = mutableListOf<SettingEvent.Updated>()
+            eventBus.subscribe<SettingEvent.Updated> { received += it }
+
+            UpdateSetting(repository, eventBus)(SettingKey.THEME, "DARK")
+
+            assertEquals(listOf(SettingEvent.Updated(SettingKey.THEME, "DARK")), received)
+        }
+
+    @Test
+    fun `a rejected UpdateSetting publishes no event`() =
+        runTest {
+            val repository = FakeSettingsRepository()
+            val eventBus = InMemoryEventBus()
+            val received = mutableListOf<SettingEvent.Updated>()
+            eventBus.subscribe<SettingEvent.Updated> { received += it }
+
+            UpdateSetting(repository, eventBus)(SettingKey.THEME, "RAINBOW")
+
+            assertTrue(received.isEmpty())
+        }
+
+    @Test
     fun `UpdateSetting rejects a theme value outside the catalog's domain (SET-R-01)`() =
         runTest {
             val repository = FakeSettingsRepository()
 
-            val result = UpdateSetting(repository)(SettingKey.THEME, "RAINBOW")
+            val result = UpdateSetting(repository, InMemoryEventBus())(SettingKey.THEME, "RAINBOW")
 
             assertEquals(SettingError.InvalidValue(SettingKey.THEME, "RAINBOW"), (result as OmniResult.Failure).error)
             assertEquals(null, repository.findSetting(SettingKey.THEME))
@@ -67,7 +96,7 @@ class SettingsUseCasesTest {
         runTest {
             val repository = FakeSettingsRepository()
 
-            val result = UpdateSetting(repository)(SettingKey.NOTIFICATION_DAILY_BUDGET, "11")
+            val result = UpdateSetting(repository, InMemoryEventBus())(SettingKey.NOTIFICATION_DAILY_BUDGET, "11")
 
             assertTrue(result is OmniResult.Failure)
         }
@@ -77,7 +106,8 @@ class SettingsUseCasesTest {
         runTest {
             val repository = FakeSettingsRepository()
 
-            val result = UpdateSetting(repository)(SettingKey.NOTIFICATION_QUIET_HOURS_START, "not-a-time")
+            val result =
+                UpdateSetting(repository, InMemoryEventBus())(SettingKey.NOTIFICATION_QUIET_HOURS_START, "not-a-time")
 
             assertTrue(result is OmniResult.Failure)
         }

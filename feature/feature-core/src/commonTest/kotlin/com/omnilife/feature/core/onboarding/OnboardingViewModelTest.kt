@@ -23,7 +23,7 @@ class OnboardingViewModelTest {
         taskRepository: FakeTaskRepository = FakeTaskRepository(),
         onCompleted: () -> Unit = {},
     ) = OnboardingViewModel(
-        updateSetting = UpdateSetting(settingsRepository),
+        updateSetting = UpdateSetting(settingsRepository, InMemoryEventBus()),
         completeOnboarding = CompleteOnboarding(settingsRepository),
         createTask = CreateTask(taskRepository, InMemoryEventBus(), newId = { "task-1" }),
         listId = "list-1",

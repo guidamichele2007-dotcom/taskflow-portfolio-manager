@@ -45,4 +45,31 @@ class NetworkMonitorTest {
 
         assertTrue(observed.isEmpty())
     }
+
+    @Test
+    fun `cancel stops further notifications to that listener`() {
+        val monitor = ManualNetworkMonitor()
+        val observed = mutableListOf<Boolean>()
+        val subscription = monitor.onConnectivityChanged { observed.add(it) }
+
+        subscription.cancel()
+        monitor.setOnline(false)
+
+        assertTrue(observed.isEmpty())
+    }
+
+    @Test
+    fun `cancelling one listener leaves another intact`() {
+        val monitor = ManualNetworkMonitor()
+        val cancelled = mutableListOf<Boolean>()
+        val kept = mutableListOf<Boolean>()
+        val subscription = monitor.onConnectivityChanged { cancelled.add(it) }
+        monitor.onConnectivityChanged { kept.add(it) }
+
+        subscription.cancel()
+        monitor.setOnline(false)
+
+        assertTrue(cancelled.isEmpty())
+        assertEquals(listOf(false), kept)
+    }
 }
