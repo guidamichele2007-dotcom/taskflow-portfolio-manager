@@ -82,9 +82,17 @@ public fun TaskListScreen(
                 modifier = Modifier.align(Alignment.BottomCenter).padding(OmniTheme.spacing.spazio3),
             )
         }
+        // MVP Release 1.0 bug hunt: OmniSnackbarHost's own Row is fillMaxWidth(), so it spans the
+        // full screen width regardless of this align() — a plain spazio3 bottom padding (matching
+        // the FAB's own) left it directly behind the FAB (OmniTheme.spacing.spazio6 tall) rather
+        // than above it. Extra bottom padding clears the FAB's full height plus a visible gap.
         OmniSnackbarHost(
             state = snackbarHostState,
-            modifier = Modifier.align(Alignment.BottomCenter).padding(OmniTheme.spacing.spazio3),
+            modifier =
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(horizontal = OmniTheme.spacing.spazio3, vertical = OmniTheme.spacing.spazio1)
+                    .padding(bottom = OmniTheme.spacing.spazio6),
         )
     }
 }
