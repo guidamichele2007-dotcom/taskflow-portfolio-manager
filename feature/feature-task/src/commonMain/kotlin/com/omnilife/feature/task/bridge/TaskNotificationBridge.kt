@@ -73,11 +73,13 @@ public class TaskNotificationBridge(
      */
     private suspend fun reconcileSuspend(taskId: EntityId) {
         notificationBroker.cancel(taskId)
-        val task = repository.findTaskById(taskId) ?: return
-        if (task.completed) return
-        val reminderConfig = task.reminderConfig ?: return
-        val dueDate = task.dueDate ?: return
-        val dueTime = task.dueTime ?: return
+        val task = repository.findTaskById(taskId)
+        val reminderConfig = task?.reminderConfig
+        val dueDate = task?.dueDate
+        val dueTime = task?.dueTime
+        if (task == null || task.completed || reminderConfig == null || dueDate == null || dueTime == null) {
+            return
+        }
 
         val dueInstant = LocalDateTime(dueDate, dueTime).toInstant(zone)
         val leadMillis = reminderConfig.leadMinutesBeforeDue * MILLIS_PER_MINUTE
