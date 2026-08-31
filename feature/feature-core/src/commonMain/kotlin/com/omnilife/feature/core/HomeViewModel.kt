@@ -47,11 +47,14 @@ public class HomeViewModel(
     private val searchService: UnifiedSearchService,
     private val taskRepository: TaskRepository,
     eventBus: EventBus,
-    private val getTasksForView: GetTasksForView = GetTasksForView(taskRepository),
     private val recentSearchStore: RecentSearchStore = InMemoryRecentSearchStore(),
     private val widgetRegistry: HomeWidgetRegistry = InMemoryHomeWidgetRegistry(),
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
 ) {
+    // Not a constructor parameter (detekt LongParameterList, threshold 10): no caller needs a
+    // custom GetTasksForView — it's always the same use case built directly over taskRepository.
+    private val getTasksForView: GetTasksForView = GetTasksForView(taskRepository)
+
     private val _state = MutableStateFlow(HomeUiState())
     public val state: StateFlow<HomeUiState> = _state.asStateFlow()
 

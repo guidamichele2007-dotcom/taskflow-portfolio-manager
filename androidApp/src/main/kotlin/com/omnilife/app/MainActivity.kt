@@ -187,7 +187,6 @@ private fun HomeTab(
                 searchService = container.unifiedSearchService,
                 taskRepository = container.taskRepository,
                 eventBus = container.eventBus,
-                getTasksForView = container.getTasksForView,
                 recentSearchStore = container.recentSearchStore,
             )
         }
