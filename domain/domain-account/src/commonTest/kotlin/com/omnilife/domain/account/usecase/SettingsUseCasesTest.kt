@@ -4,8 +4,8 @@ import com.omnilife.core.common.OmniResult
 import com.omnilife.core.eventbus.InMemoryEventBus
 import com.omnilife.core.eventbus.subscribe
 import com.omnilife.domain.account.SettingDefaults
-import com.omnilife.domain.account.SettingEvent
 import com.omnilife.domain.account.SettingError
+import com.omnilife.domain.account.SettingEvent
 import com.omnilife.domain.account.SettingKey
 import com.omnilife.domain.account.SettingScope
 import kotlinx.coroutines.test.runTest
