@@ -1306,6 +1306,154 @@
 
 ---
 
+## TDR-41 · `AppContainer` come singleton di processo (`OmniLifeApplication`, app shell)
+
+> Nota: decisione presa durante lo Sprint 6 ("MVP Hardening + Real Device Readiness"), correggendo un problema architetturale reale trovato nell'audit iniziale: `MainActivity.onCreate` costruiva un `AppContainer(this)` nuovo ogni volta, quindi nulla al di fuori di quella singola Activity (in particolare un `BroadcastReceiver`, che il sistema istanzia da solo, senza argomenti al costruttore) poteva mai raggiungere lo stesso `EventBus`/`NotificationHistoryStore`/`SyncStateManager` in memoria — un requisito diventato bloccante per correggere la consegna reale delle notifiche (vedi TDR-42).
+
+**Decisione**: `OmniLifeApplication : Application()` possiede `val container: AppContainer by lazy { AppContainer(this) }`; `MainActivity` e `NotificationFireReceiver` lo leggono entrambi da lì, invece di costruire ciascuno la propria istanza.
+
+| Alternativa | Descrizione | Esito |
+|---|---|---|
+| **A — Singleton in `Application`** | Pattern Android standard per uno stato di processo condiviso, senza introdurre alcun framework DI (TDR-19 resta valido: injection manuale via costruttore) | ✅ Scelta |
+| **B — Lasciare `AppContainer` per-Activity e far ricostruire al `BroadcastReceiver` una propria istanza "leggera"** | Romperebbe esattamente ciò che serve: il receiver avrebbe una `NotificationHistoryStore` vuota, diversa da quella dell'Activity in esecuzione | ❌ Scartata |
+| **C — `object AppContainer` (singleton Kotlin globale)** | Funzionerebbe, ma perderebbe l'iniezione del `Context` reale (serve `applicationContext`, disponibile solo a runtime) senza reintrodurre uno stato globale ancora più difficile da testare di un singleton scoped ad `Application` | ❌ Scartata |
+
+**Motivazione**: **A** è il pattern minimo, già nativo alla piattaforma, che risolve il problema reale senza introdurre un framework o uno stato globale non scoped al processo.
+
+**Vantaggi**: `NotificationFireReceiver` può leggere lo stato reale dell'app in esecuzione; nessuna duplicazione di `EventBus`/repository.
+
+**Svantaggi**: nessuno strutturale.
+
+**Impatto sul progetto**: `AndroidManifest.xml` dichiara `android:name=".OmniLifeApplication"`; `MainActivity`/`NotificationFireReceiver` lo leggono via `(application as OmniLifeApplication).container` / `(context.applicationContext as OmniLifeApplication).container`.
+
+**Rischi**: nessuno strutturale — non compilato/verificato in questo sandbox (nessun Android SDK).
+
+**Costo**: nessuno.
+
+**Facilità di manutenzione**: alta — un solo punto di costruzione, non due.
+
+**Scalabilità**: non applicabile.
+
+**Compatibilità con le Bible**: piena — TDR-19 (injection manuale) resta intatto, nessun framework introdotto.
+
+---
+
+## TDR-42 · Consegna reale delle notifiche Android (`NotificationFireReceiver`, core-notifications + app shell)
+
+> Nota: decisione presa durante lo Sprint 6, chiudendo un gap che il codice stesso documentava esplicitamente da TDR-26/Sprint 3 in poi ("[onFire] cannot survive process death... a real integration needs a BroadcastReceiver... out of this module"). L'audit di questo sprint ha confermato che, fino ad ora, **nessuna notifica locale è mai realmente comparsa nella tray di sistema Android**, in nessuna circostanza: `DefaultLocalNotificationService.show()` programmava l'allarme ma il suo `onFire` si limitava ad aggiornare la cronologia in memoria, mai a chiamare `NotificationManagerCompat`; e nessun `BroadcastReceiver` era comunque registrato per ricevere l'allarme.
+
+**Decisione**: `NotificationScheduler.schedule` (Android `actual`) rende esplicito-al-pacchetto (`Intent.setPackage`) il broadcast dell'allarme (senza che `core-notifications` conosca il nome della classe `androidApp`-specifica); `androidApp` aggiunge un `NotificationFireReceiver` reale, registrato in manifest, che legge la richiesta pendente da `AppContainer.notificationHistoryStore` (TDR-41) e chiama `NotificationManagerCompat.notify(...)` per davvero. Aggiunte anche le due permission manifest mancanti (`POST_NOTIFICATIONS`, `SCHEDULE_EXACT_ALARM`) e una guardia `canScheduleExactAlarms()` con fallback a `setAndAllowWhileIdle` per non far crashare lo scheduling su API 31+ senza il permesso.
+
+| Alternativa | Descrizione | Esito |
+|---|---|---|
+| **A — `BroadcastReceiver` reale + singleton di processo (TDR-41)** | Chiude il gap alla radice, riusando esattamente il meccanismo che `AlarmManager` è progettato per supportare | ✅ Scelta |
+| **B — Continuare a fidarsi della closure `onFire` in-process** | Funzionerebbe solo se il processo restasse vivo fino all'orario programmato — falso nella maggioranza dei casi reali (Android termina i processi in background) | ❌ Scartata |
+| **C — Introdurre `WorkManager` per la consegna** | Nuova dipendenza/tecnologia non ancora decisa da nessun TDR; il problema reale (nessun receiver) si risolve senza di essa | ❌ Scartata (fuori perimetro — "non introdurre una nuova tecnologia" senza necessità genuina) |
+
+**Motivazione**: **A** è la correzione minima e diretta del gap che il codice stesso segnalava da due sprint; **C** aggiungerebbe una tecnologia nuova per un problema che l'API già presente (`AlarmManager` + `BroadcastReceiver`) risolve.
+
+**Vantaggi**: le notifiche promemoria compaiono realmente sul dispositivo (finché il processo non è stato terminato del tutto dal sistema — limite residuo, vedi sprint6_report.md §7, perché `NotificationHistoryStore` resta solo in-memoria).
+
+**Svantaggi**: nessuno strutturale; il limite di sopravvivenza al kill del processo resta un rischio noto, non introdotto da questa decisione ma reso più visibile.
+
+**Impatto sul progetto**: `core-notifications` (androidMain), `androidApp` (nuovo `NotificationFireReceiver.kt`, `AndroidManifest.xml`).
+
+**Rischi**: non compilato/verificato in questo sandbox.
+
+**Costo**: nessuno.
+
+**Facilità di manutenzione**: alta.
+
+**Scalabilità**: non applicabile.
+
+**Compatibilità con le Bible**: piena — NTF-001 (nessuna notifica diretta fuori dal broker) resta rispettato: il receiver legge lo stato già deciso dal broker, non ne bypassa la logica.
+
+---
+
+## TDR-43 · `SettingEvent` per la reattività di tema/accento (domain-account)
+
+> Nota: decisione presa durante lo Sprint 6, trovando che un cambio di tema in Impostazioni non aveva alcun effetto visibile fino al riavvio dell'app — `MainActivity` leggeva `Setting` una sola volta all'avvio.
+
+**Decisione**: `UpdateSetting` riceve un `EventBus` e pubblica `SettingEvent.Updated(key, value)` dopo un upsert riuscito — stessa forma di `TaskEvent.Updated` (TDR-35).
+
+| Alternativa | Descrizione | Esito |
+|---|---|---|
+| **A — `SettingEvent` via Event Bus** | Riusa esattamente il meccanismo di integrazione cross-modulo già stabilito (Technical Architecture Bible §03), applicato a un nuovo tipo di evento | ✅ Scelta |
+| **B — `SettingsRepository` esporrebbe un `Flow<Setting>` osservabile** | Cambierebbe la firma del repository (tutti i metodi oggi sono `suspend` one-shot) per un solo consumatore (il tema); più invasivo del necessario | ❌ Scartata |
+| **C — Nessuna reattività; documentare "riavvia l'app dopo aver cambiato tema"** | Eviterebbe qualunque modifica, ma lascerebbe un bug reale e visibile non corretto nonostante fosse a basso costo risolverlo | ❌ Scartata |
+
+**Motivazione**: **A** è coerente con il pattern già in uso per gli eventi di dominio, a costo minimo.
+
+**Vantaggi**: cambiare tema/accento in Impostazioni si riflette immediatamente; `ThemeMode.SYSTEM` ora segue davvero il tema del dispositivo (bug distinto corretto nella stessa passata, vedi sprint6_report.md §6).
+
+**Svantaggi**: nessuno strutturale.
+
+**Impatto sul progetto**: `domain-account` (nuovo `SettingEvent.kt`, `UpdateSetting` cambia firma), `androidApp/MainActivity.kt` (sottoscrizione).
+
+**Rischi**: nessuno.
+
+**Costo**: nessuno.
+
+**Facilità di manutenzione**: alta.
+
+**Scalabilità**: non applicabile.
+
+**Compatibilità con le Bible**: piena.
+
+---
+
+## TDR-44 · `NetworkMonitor.onConnectivityChanged` senza unsubscribe (core-sync)
+
+> Nota: decisione presa durante lo Sprint 6, trovando che `NetworkMonitor` (TDR-28, Sprint 3) aveva la stessa forma-senza-unsubscribe che TDR-34 aveva corretto per `SyncStateManager.observe` — semplicemente mai applicata qui. Nessun chiamante di produzione esisteva ancora (nessun rischio reale oggi), ma il prossimo che avesse cablato questo monitor avrebbe ereditato lo stesso leak.
+
+**Decisione**: `onConnectivityChanged` ritorna un `NetworkMonitorSubscription` (`fun cancel()`), identico nella forma a `SyncStateSubscription`.
+
+**Motivazione/alternative**: stesse di TDR-34, applicate qui per coerenza — non ripetute per esteso.
+
+**Impatto sul progetto**: `core-sync/NetworkMonitor.kt`, `NetworkMonitorTest.kt` (2 nuovi test comportamentali).
+
+**Compatibilità con le Bible**: piena.
+
+---
+
+## TDR-45 · `TaskEvent.Restored` / `TaskEvent.PermanentlyDeleted` (domain-task)
+
+> Nota: decisione presa durante lo Sprint 6. L'audit del ciclo di vita Task ha trovato che `RestoreTask` (MFC-R-10) e `PermanentlyDeleteTask` non pubblicavano alcun evento fin da quando erano stati scritti — i tre bridge Task↔Search/Notification/Sync (Sprint 5) non potevano quindi mai reagire a un ripristino dal cestino o a un'eliminazione permanente. Un task ripristinato restava indicizzato come `TRASHED` a tempo indeterminato, il suo promemoria non veniva mai riprogrammato, e la modifica non veniva mai messa in coda per la sync.
+
+**Decisione**: entrambi i casi d'uso ricevono un `EventBus` e pubblicano rispettivamente `TaskEvent.Restored`/`TaskEvent.PermanentlyDeleted`; i tre bridge sottoscrivono i nuovi eventi (il bridge di ricerca chiama `remove()`, non `index()`, per `PermanentlyDeleted`, perché la riga non è più recuperabile dal repository).
+
+**Motivazione**: stessa forma minimale di ogni altro `TaskEvent` (TDR-35) — un ID e un timestamp, mai il contenuto.
+
+**Impatto sul progetto**: `domain-task/TaskEvent.kt`, `DeleteTask.kt`; `feature-task/bridge/Task{SearchIndex,Notification,SyncOutbox}Bridge.kt`; `androidApp/AppContainer.kt` (ora costruisce anche `restoreTask`/`permanentlyDeleteTask`); nuovo affordance "Annulla" (snackbar) in `TaskListScreen`/`TaskListViewModel` — `RestoreTask` esisteva ed era testato dallo Sprint 5, ma nessuna UI lo chiamava mai.
+
+**Rischi**: nessuno strutturale.
+
+**Compatibilità con le Bible**: piena — MFC-R-09/R-10/R-11 (trash + 1 gesto + undo immediato) ora effettivamente raggiungibili dall'interfaccia, non solo dal dominio.
+
+---
+
+## TDR-46 · Varianti di build Debug/Internal/Release (androidApp)
+
+> Nota: decisione presa durante lo Sprint 6 (§14 "Release Build" del mandato di sprint). `androidApp/build.gradle.kts` non aveva alcun `buildTypes`/`signingConfigs` esplicito — solo i due tipi impliciti di default di AGP, nessuna configurazione di firma.
+
+**Decisione**: tre `buildTypes` — `debug` (default AGP, `applicationIdSuffix=".debug"`), `internal` (firmato con la keystore di debug auto-generata, installabile insieme alle altre due varianti, pensato per test interni), `release` (minify+shrink attivi, firma letta solo da 4 variabili d'ambiente — mai hardcoded; senza di esse `assembleRelease` fallisce con un errore di firma esplicito, non con una firma finta).
+
+| Alternativa | Descrizione | Esito |
+|---|---|---|
+| **A — 3 build type, firma release da env var** | Riproducibile, mai un segreto nel repository, fallisce in modo esplicito se la firma manca | ✅ Scelta |
+| **B — Firma release imbucata in un file `keystore.properties` committato** | Esattamente il tipo di segreto nel repository che questo stesso audit di sicurezza (§9) verifica non debba esistere | ❌ Scartata |
+| **C — Solo Debug/Release, nessuna variante Internal** | Non soddisferebbe la richiesta esplicita di questo sprint di un canale di test interno distinto dal debug locale | ❌ Scartata |
+
+**Motivazione**: **A** è l'unico approccio che non introduce né un segreto nel repository né una firma finta, restando comunque riproducibile da chi ha le credenziali reali.
+
+**Impatto sul progetto**: `androidApp/build.gradle.kts`, nuovo `androidApp/proguard-rules.pro`.
+
+**Rischi**: non verificato in questo sandbox (nessun Android SDK per eseguire `assembleRelease`/`assembleInternal`).
+
+**Compatibilità con le Bible**: piena — Security & Privacy Bible (nessun segreto nel repository).
+
+---
+
 ## Tabella Finale — Decisioni Tecnologiche Approvate
 
 | ID | Area | Decisione approvata |
@@ -1350,8 +1498,14 @@
 | TDR-38 | Navigazione MVP scritta a mano (app shell) | `AppDestination` sigillato + back stack per-tab in memoria — nessuna libreria di navigazione di terze parti, coerente con TDR-19/22/24 |
 | TDR-39 | `NotificationBroker.cancel` (core-notifications) | Cancellazione pubblica via broker (mai un accesso diretto a `LocalNotificationService`) — NTF-001 vale anche per l'annullamento |
 | TDR-40 | `SyncStateManager.updatePendingCount` (core-sync) | Aggiorna solo `pendingCount`, mai `phase`/`lastError` — evita di simulare un esito di sync mai avvenuto |
+| TDR-41 | `AppContainer` come singleton di processo (app shell) | `OmniLifeApplication` possiede `AppContainer`; `MainActivity`/`NotificationFireReceiver` lo condividono — nessun framework DI introdotto |
+| TDR-42 | Consegna reale delle notifiche Android (core-notifications + app shell) | `NotificationFireReceiver` reale + permission manifest mancanti + guardia `canScheduleExactAlarms` — chiude un gap documentato da TDR-26 in poi |
+| TDR-43 | `SettingEvent` per la reattività di tema/accento (domain-account) | `UpdateSetting` pubblica `SettingEvent.Updated`, stessa forma di TDR-35 |
+| TDR-44 | `NetworkMonitor.onConnectivityChanged` senza unsubscribe (core-sync) | `NetworkMonitorSubscription`, stessa forma di TDR-34 |
+| TDR-45 | `TaskEvent.Restored`/`PermanentlyDeleted` (domain-task) | Chiude il gap che lasciava i tre bridge Sprint 5 senza reagire a ripristino/eliminazione permanente |
+| TDR-46 | Varianti di build Debug/Internal/Release (androidApp) | Firma release solo da variabili d'ambiente, mai hardcoded; variante Internal firmata con la keystore di debug |
 
-**Nota sulle voci TDR-19…40**: a differenza di TDR-01…18 (decise tutte insieme, prima di ogni riga di codice), queste voci sono state aggiunte durante gli sprint di sviluppo reale (TDR-19…21 nello Sprint 1, TDR-22 nello Sprint 2, TDR-23…33 nello Sprint 3 — incluso lo Scope Change D-12 che ha reintrodotto le notifiche a metà sprint —, TDR-34…40 nello Sprint 5, il Macro Sprint "MVP Vertical Slice") quando l'implementazione ha incontrato una decisione tecnica non coperta dalle Bible esistenti. Seguono lo stesso metodo (≥3 alternative, motivazione contro la documentazione esistente) e la stessa autorità delle prime 18.
+**Nota sulle voci TDR-19…46**: a differenza di TDR-01…18 (decise tutte insieme, prima di ogni riga di codice), queste voci sono state aggiunte durante gli sprint di sviluppo reale (TDR-19…21 nello Sprint 1, TDR-22 nello Sprint 2, TDR-23…33 nello Sprint 3 — incluso lo Scope Change D-12 che ha reintrodotto le notifiche a metà sprint —, TDR-34…40 nello Sprint 5, TDR-41…46 nello Sprint 6 "MVP Hardening + Real Device Readiness") quando l'implementazione ha incontrato una decisione tecnica non coperta dalle Bible esistenti. Seguono lo stesso metodo (≥3 alternative, motivazione contro la documentazione esistente) e la stessa autorità delle prime 18.
 
 **Filo conduttore delle 18 decisioni originarie**: ovunque esistesse una scelta tra (a) controllo diretto/open-source/portabile e (b) comodità tramite un fornitore proprietario di terze parti, è stata preferita (a) — coerenza diretta con l'indipendenza tecnologica ed economica già rivendicata in tutta la documentazione precedente (Product Constitution, Business Strategy, Technical Architecture Bible). Nessuna decisione introduce un fornitore con visibilità sui contenuti utente; ogni decisione è stata verificata contro almeno una Bible esistente e non ne contraddice alcuna.
 
