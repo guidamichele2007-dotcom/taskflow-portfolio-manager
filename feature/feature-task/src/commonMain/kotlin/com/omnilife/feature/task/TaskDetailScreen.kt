@@ -30,6 +30,7 @@ import com.omnilife.core.designsystem.components.OmniTextField
 import com.omnilife.core.designsystem.theme.OmniIconType
 import com.omnilife.core.designsystem.theme.OmniTheme
 import com.omnilife.domain.task.Subtask
+import com.omnilife.domain.task.Task
 import com.omnilife.domain.task.TaskPriority
 
 private val PRIORITIES = TaskPriority.entries
@@ -60,67 +61,84 @@ public fun TaskDetailBottomSheet(
         val task = state.task ?: return@OmniBottomSheet
         var showDeleteConfirm by remember { mutableStateOf(false) }
 
-        Column(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
-                    .padding(OmniTheme.spacing.spazio3),
-            verticalArrangement = Arrangement.spacedBy(OmniTheme.spacing.spazio2),
-        ) {
-            OmniTextField(
-                value = task.title,
-                onValueChange = { onIntent(TaskDetailIntent.ChangeTitle(it)) },
-                label = "Titolo",
-            )
-            OmniSegmentedControl(
-                segments = PRIORITY_LABELS,
-                selectedIndex = PRIORITIES.indexOf(task.priority),
-                onSegmentSelected = { onIntent(TaskDetailIntent.ChangePriority(PRIORITIES[it])) },
-            )
-            OmniTextField(
-                value = task.notes.orEmpty(),
-                onValueChange = { onIntent(TaskDetailIntent.ChangeNotes(it.ifBlank { null })) },
-                label = "Note",
-                singleLine = false,
-            )
-            SubtaskSection(
-                subtasks = state.subtasks,
-                newSubtaskTitle = state.newSubtaskTitle,
-                onNewSubtaskTitleChange = { onIntent(TaskDetailIntent.ChangeNewSubtaskTitle(it)) },
-                onAddSubtask = { onIntent(TaskDetailIntent.AddSubtask) },
-                onToggleSubtask = { onIntent(TaskDetailIntent.ToggleSubtask(it)) },
-                onDeleteSubtask = { onIntent(TaskDetailIntent.DeleteSubtask(it)) },
-            )
-            if (state.errorMessage != null) {
-                BasicText(
-                    text = state.errorMessage,
-                    style = OmniTheme.typography.didascalia.copy(color = OmniTheme.colors.statoAttenzione),
-                )
-            }
-            OmniButton(
-                text = "Elimina",
-                onClick = { showDeleteConfirm = true },
-                variant = OmniButtonVariant.SECONDARIO,
-            )
-        }
+        TaskDetailForm(state = state, task = task, onIntent = onIntent, onRequestDelete = { showDeleteConfirm = true })
 
         if (showDeleteConfirm) {
-            OmniDialog(
-                title = "Eliminare l'attività?",
-                message = "Puoi ripristinarla dal cestino (MFC-R-09/R-10).",
-                onDismissRequest = { showDeleteConfirm = false },
-                confirmLabel = "Elimina",
+            DeleteTaskDialog(
+                onDismiss = { showDeleteConfirm = false },
                 onConfirm = {
                     showDeleteConfirm = false
                     onIntent(TaskDetailIntent.Delete)
                 },
-                dismissLabel = "Annulla",
-                onDismissClick = { showDeleteConfirm = false },
-                isDestructiveConfirm = true,
             )
         }
     }
+}
+
+@Composable
+private fun TaskDetailForm(
+    state: TaskDetailUiState,
+    task: Task,
+    onIntent: (TaskDetailIntent) -> Unit,
+    onRequestDelete: () -> Unit,
+) {
+    Column(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(OmniTheme.spacing.spazio3),
+        verticalArrangement = Arrangement.spacedBy(OmniTheme.spacing.spazio2),
+    ) {
+        OmniTextField(
+            value = task.title,
+            onValueChange = { onIntent(TaskDetailIntent.ChangeTitle(it)) },
+            label = "Titolo",
+        )
+        OmniSegmentedControl(
+            segments = PRIORITY_LABELS,
+            selectedIndex = PRIORITIES.indexOf(task.priority),
+            onSegmentSelected = { onIntent(TaskDetailIntent.ChangePriority(PRIORITIES[it])) },
+        )
+        OmniTextField(
+            value = task.notes.orEmpty(),
+            onValueChange = { onIntent(TaskDetailIntent.ChangeNotes(it.ifBlank { null })) },
+            label = "Note",
+            singleLine = false,
+        )
+        SubtaskSection(
+            subtasks = state.subtasks,
+            newSubtaskTitle = state.newSubtaskTitle,
+            onNewSubtaskTitleChange = { onIntent(TaskDetailIntent.ChangeNewSubtaskTitle(it)) },
+            onAddSubtask = { onIntent(TaskDetailIntent.AddSubtask) },
+            onToggleSubtask = { onIntent(TaskDetailIntent.ToggleSubtask(it)) },
+            onDeleteSubtask = { onIntent(TaskDetailIntent.DeleteSubtask(it)) },
+        )
+        if (state.errorMessage != null) {
+            BasicText(
+                text = state.errorMessage,
+                style = OmniTheme.typography.didascalia.copy(color = OmniTheme.colors.statoAttenzione),
+            )
+        }
+        OmniButton(text = "Elimina", onClick = onRequestDelete, variant = OmniButtonVariant.SECONDARIO)
+    }
+}
+
+@Composable
+private fun DeleteTaskDialog(
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit,
+) {
+    OmniDialog(
+        title = "Eliminare l'attività?",
+        message = "Puoi ripristinarla dal cestino (MFC-R-09/R-10).",
+        onDismissRequest = onDismiss,
+        confirmLabel = "Elimina",
+        onConfirm = onConfirm,
+        dismissLabel = "Annulla",
+        onDismissClick = onDismiss,
+        isDestructiveConfirm = true,
+    )
 }
 
 @Composable

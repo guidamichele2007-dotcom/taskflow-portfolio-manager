@@ -96,74 +96,23 @@ private fun AppShell(container: AppContainer) {
 
     Column(modifier = Modifier.fillMaxSize()) {
         Box(modifier = Modifier.weight(1f)) {
-            when (selectedTab) {
-                // HomeScreen's widget rows don't yet carry a per-entry onClick (Sprint 4's
-                // HomeSectionState/HomeListEntry shape has no click callback) — tapping a task
-                // from Today Overview to open its detail sheet is a residual gap, not wired here.
-                AppTab.OGGI -> HomeTab(container = container, onCapture = { creatingTask = true })
-
-                AppTab.MODULI ->
-                    TaskListTab(
-                        container = container,
-                        onOpenTask = { openTaskId = it },
-                        onCapture = { creatingTask = true },
-                    )
-
-                AppTab.CERCA -> SearchTab(container = container, onOpenTask = { openTaskId = it })
-                AppTab.PROFILO -> SettingsTab(container = container)
-            }
+            AppTabContent(
+                container = container,
+                selectedTab = selectedTab,
+                onOpenTask = { openTaskId = it },
+                onCapture = { creatingTask = true },
+            )
         }
-        // OmniIconType (core-designsystem) has no dedicated home/list/profile glyphs yet (Sprint 2
-        // scoped icons to what Home/Task/Notifications needed, not a 4-tab bar) — reusing the
-        // closest existing icons rather than inventing new ones outside this sprint's scope.
-        OmniBottomBar(
-            items =
-                listOf(
-                    OmniTabBarItem(OmniIconType.INFO, OmniIconType.INFO, AppTab.OGGI.label),
-                    OmniTabBarItem(OmniIconType.CHECK, OmniIconType.CHECK, AppTab.MODULI.label),
-                    OmniTabBarItem(OmniIconType.SEARCH, OmniIconType.SEARCH, AppTab.CERCA.label),
-                    OmniTabBarItem(OmniIconType.MORE_HORIZONTAL, OmniIconType.MORE_HORIZONTAL, AppTab.PROFILO.label),
-                ),
-            selectedIndex = AppTab.entries.indexOf(selectedTab),
-            onItemSelected = { selectedTab = AppTab.entries[it] },
-        )
+        AppTabBar(selectedTab = selectedTab, onTabSelected = { selectedTab = it })
     }
 
     val openId = openTaskId
     if (openId != null) {
-        val detailViewModel =
-            remember(openId) {
-                TaskDetailViewModel(
-                    taskId = openId,
-                    repository = container.taskRepository,
-                    updateTaskFields = container.updateTaskFields,
-                    deleteTask = container.deleteTask,
-                    addSubtask = container.addSubtask,
-                    toggleSubtask = container.toggleSubtask,
-                    deleteSubtask = container.deleteSubtask,
-                    reorderSubtasks = container.reorderSubtasks,
-                )
-            }
-        DisposableEffect(openId) { onDispose { detailViewModel.clear() } }
-        val state by detailViewModel.state.collectAsState()
-        TaskDetailBottomSheet(state = state, onIntent = detailViewModel::dispatch, onDismiss = { openTaskId = null })
+        TaskDetailOverlay(container = container, taskId = openId, onDismiss = { openTaskId = null })
     }
-
     if (creatingTask) {
-        val createViewModel =
-            remember {
-                TaskCreateViewModel(
-                    createTask = container.createTask,
-                    listId = container.defaultListId,
-                    ownerAccountId = container.accountId(),
-                    deviceId = container.deviceIdentifier(),
-                )
-            }
-        DisposableEffect(Unit) { onDispose { createViewModel.clear() } }
-        val state by createViewModel.state.collectAsState()
-        TaskCreateBottomSheet(
-            state = state,
-            onIntent = createViewModel::dispatch,
+        TaskCreateOverlay(
+            container = container,
             onDismiss = { creatingTask = false },
             onCreated = { createdId ->
                 creatingTask = false
@@ -171,6 +120,94 @@ private fun AppShell(container: AppContainer) {
             },
         )
     }
+}
+
+@Composable
+private fun AppTabContent(
+    container: AppContainer,
+    selectedTab: AppTab,
+    onOpenTask: (String) -> Unit,
+    onCapture: () -> Unit,
+) {
+    when (selectedTab) {
+        // HomeScreen's widget rows don't yet carry a per-entry onClick (Sprint 4's
+        // HomeSectionState/HomeListEntry shape has no click callback) — tapping a task from
+        // Today Overview to open its detail sheet is a residual gap, not wired here.
+        AppTab.OGGI -> HomeTab(container = container, onCapture = onCapture)
+        AppTab.MODULI -> TaskListTab(container = container, onOpenTask = onOpenTask, onCapture = onCapture)
+        AppTab.CERCA -> SearchTab(container = container, onOpenTask = onOpenTask)
+        AppTab.PROFILO -> SettingsTab(container = container)
+    }
+}
+
+@Composable
+private fun AppTabBar(
+    selectedTab: AppTab,
+    onTabSelected: (AppTab) -> Unit,
+) {
+    // OmniIconType (core-designsystem) has no dedicated home/list/profile glyphs yet (Sprint 2
+    // scoped icons to what Home/Task/Notifications needed, not a 4-tab bar) — reusing the closest
+    // existing icons rather than inventing new ones outside this sprint's scope.
+    OmniBottomBar(
+        items =
+            listOf(
+                OmniTabBarItem(OmniIconType.INFO, OmniIconType.INFO, AppTab.OGGI.label),
+                OmniTabBarItem(OmniIconType.CHECK, OmniIconType.CHECK, AppTab.MODULI.label),
+                OmniTabBarItem(OmniIconType.SEARCH, OmniIconType.SEARCH, AppTab.CERCA.label),
+                OmniTabBarItem(OmniIconType.MORE_HORIZONTAL, OmniIconType.MORE_HORIZONTAL, AppTab.PROFILO.label),
+            ),
+        selectedIndex = AppTab.entries.indexOf(selectedTab),
+        onItemSelected = { onTabSelected(AppTab.entries[it]) },
+    )
+}
+
+@Composable
+private fun TaskDetailOverlay(
+    container: AppContainer,
+    taskId: String,
+    onDismiss: () -> Unit,
+) {
+    val detailViewModel =
+        remember(taskId) {
+            TaskDetailViewModel(
+                taskId = taskId,
+                repository = container.taskRepository,
+                updateTaskFields = container.updateTaskFields,
+                deleteTask = container.deleteTask,
+                addSubtask = container.addSubtask,
+                toggleSubtask = container.toggleSubtask,
+                deleteSubtask = container.deleteSubtask,
+                reorderSubtasks = container.reorderSubtasks,
+            )
+        }
+    DisposableEffect(taskId) { onDispose { detailViewModel.clear() } }
+    val state by detailViewModel.state.collectAsState()
+    TaskDetailBottomSheet(state = state, onIntent = detailViewModel::dispatch, onDismiss = onDismiss)
+}
+
+@Composable
+private fun TaskCreateOverlay(
+    container: AppContainer,
+    onDismiss: () -> Unit,
+    onCreated: (String) -> Unit,
+) {
+    val createViewModel =
+        remember {
+            TaskCreateViewModel(
+                createTask = container.createTask,
+                listId = container.defaultListId,
+                ownerAccountId = container.accountId(),
+                deviceId = container.deviceIdentifier(),
+            )
+        }
+    DisposableEffect(Unit) { onDispose { createViewModel.clear() } }
+    val state by createViewModel.state.collectAsState()
+    TaskCreateBottomSheet(
+        state = state,
+        onIntent = createViewModel::dispatch,
+        onDismiss = onDismiss,
+        onCreated = onCreated,
+    )
 }
 
 @Composable

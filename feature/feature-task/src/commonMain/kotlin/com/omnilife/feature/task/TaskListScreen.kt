@@ -59,63 +59,58 @@ public fun TaskListScreen(
                 placeholder = "Cerca nelle attività",
                 resultCount = if (state.searchQuery.isNotBlank()) state.tasks.size else null,
             )
-            when {
-                state.isLoading -> OmniLoadingState(modifier = Modifier.fillMaxSize())
-
-                state.isEmpty ->
-                    OmniEmptyState(
-                        icon = OmniIconType.INFO,
-                        message = if (state.isFiltered) "Nessuna attività corrisponde" else "Nessuna attività qui",
-                        actionLabel = "Nuova attività",
-                        onActionClick = onCapture,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-
-                else ->
-                    Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-                        val today = Clock.System.todayIn(TimeZone.currentSystemDefault())
-                        state.tasks.forEach { task ->
-                            TaskRow(
-                                task = task,
-                                overdue = task.isOverdue(today),
-                                onClick = { onTaskClick(task.envelope.id) },
-                                onCompletedChange = { completed ->
-                                    if (completed) {
-                                        onIntent(TaskListIntent.Complete(task.envelope.id))
-                                    } else {
-                                        onIntent(TaskListIntent.Uncomplete(task.envelope.id))
-                                    }
-                                },
-                            )
-                        }
-                    }
-            }
+            TaskListContent(state = state, onIntent = onIntent, onTaskClick = onTaskClick, onCapture = onCapture)
         }
         OmniFab(
             onClick = onCapture,
             modifier = Modifier.align(Alignment.BottomEnd).padding(OmniTheme.spacing.spazio3),
         )
-        if (state.pendingSubtaskChoiceForTaskId != null) {
+        val pendingChoiceTaskId = state.pendingSubtaskChoiceForTaskId
+        if (pendingChoiceTaskId != null) {
             SubtaskChoiceChips(
-                onCompleteAll = {
-                    onIntent(
-                        TaskListIntent.ResolveSubtaskChoice(
-                            state.pendingSubtaskChoiceForTaskId,
-                            completeOpenSubtasks = true,
-                        ),
-                    )
-                },
-                onKeepOpen = {
-                    onIntent(
-                        TaskListIntent.ResolveSubtaskChoice(
-                            state.pendingSubtaskChoiceForTaskId,
-                            completeOpenSubtasks = false,
-                        ),
-                    )
-                },
+                onCompleteAll = { onIntent(TaskListIntent.ResolveSubtaskChoice(pendingChoiceTaskId, true)) },
+                onKeepOpen = { onIntent(TaskListIntent.ResolveSubtaskChoice(pendingChoiceTaskId, false)) },
                 modifier = Modifier.align(Alignment.BottomCenter).padding(OmniTheme.spacing.spazio3),
             )
         }
+    }
+}
+
+@Composable
+private fun TaskListContent(
+    state: TaskListUiState,
+    onIntent: (TaskListIntent) -> Unit,
+    onTaskClick: (EntityId) -> Unit,
+    onCapture: () -> Unit,
+) {
+    when {
+        state.isLoading -> OmniLoadingState(modifier = Modifier.fillMaxSize())
+
+        state.isEmpty ->
+            OmniEmptyState(
+                icon = OmniIconType.INFO,
+                message = if (state.isFiltered) "Nessuna attività corrisponde" else "Nessuna attività qui",
+                actionLabel = "Nuova attività",
+                onActionClick = onCapture,
+                modifier = Modifier.fillMaxSize(),
+            )
+
+        else ->
+            Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+                val today = Clock.System.todayIn(TimeZone.currentSystemDefault())
+                state.tasks.forEach { task ->
+                    TaskRow(
+                        task = task,
+                        overdue = task.isOverdue(today),
+                        onClick = { onTaskClick(task.envelope.id) },
+                        onCompletedChange = { completed ->
+                            val id = task.envelope.id
+                            val intent = if (completed) TaskListIntent.Complete(id) else TaskListIntent.Uncomplete(id)
+                            onIntent(intent)
+                        },
+                    )
+                }
+            }
     }
 }
 
