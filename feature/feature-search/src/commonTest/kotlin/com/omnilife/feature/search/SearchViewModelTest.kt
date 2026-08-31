@@ -81,7 +81,11 @@ class SearchViewModelTest {
 
     @Test
     fun `RemoveRecentSearch removes exactly that entry`() {
-        val recentSearchStore = InMemoryRecentSearchStore().apply { record("latte"); record("pane") }
+        val recentSearchStore =
+            InMemoryRecentSearchStore().apply {
+                record("latte")
+                record("pane")
+            }
         val viewModel = SearchViewModel(FakeSearchService(), recentSearchStore)
 
         viewModel.dispatch(SearchIntent.RemoveRecentSearch("latte"))
@@ -91,7 +95,11 @@ class SearchViewModelTest {
 
     @Test
     fun `ClearRecentSearches empties the whole list`() {
-        val recentSearchStore = InMemoryRecentSearchStore().apply { record("latte"); record("pane") }
+        val recentSearchStore =
+            InMemoryRecentSearchStore().apply {
+                record("latte")
+                record("pane")
+            }
         val viewModel = SearchViewModel(FakeSearchService(), recentSearchStore)
 
         viewModel.dispatch(SearchIntent.ClearRecentSearches)

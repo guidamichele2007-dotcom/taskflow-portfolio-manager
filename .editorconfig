@@ -18,8 +18,10 @@ ktlint_standard_filename = disabled
 # stock ktlint ruleset has no @Composable exception for function-naming, so
 # every Omni*/Home* component would otherwise be flagged. TDR-22 /
 # core-designsystem; feature-core added Sprint 4 (first feature module with
-# real Compose screens).
-[{core/core-designsystem,feature/feature-core}/**.kt]
+# real Compose screens); feature-task/feature-settings/feature-search/
+# androidApp added Sprint 5 (real Task/Settings/Search screens and the
+# navigation shell — every other Compose-touched module in the tree).
+[{core/core-designsystem,feature/feature-core,feature/feature-task,feature/feature-settings,feature/feature-search,androidApp}/**.kt]
 ktlint_standard_function-naming = disabled
 
 [*.go]
